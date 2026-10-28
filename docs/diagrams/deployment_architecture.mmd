@@ -1,0 +1,39 @@
+graph TB
+    subgraph "Client Environment"
+        Browser["Desktop / Mobile Web Browser (Vite SPA)"]
+    end
+
+    subgraph "Ingress & Edge (Production / Localhost)"
+        Nginx["Reverse Proxy / Nginx (Port 80/443 / Vite Dev 5173)"]
+    end
+
+    subgraph "Application Host / Container"
+        subgraph "FastAPI Application Server (Port 8000)"
+            Uvicorn["Uvicorn ASGI Server (uvicorn.run)"]
+            FastAPIRouters["FastAPI Application & Middlewares"]
+            BackgroundWorker["Async Background Job Runner"]
+        end
+
+        subgraph "Database & Storage Subsystem"
+            SQLiteDB[("SQLite (`datawise.db`) / PostgreSQL")]
+            RedisInstance[("Redis (Port 6379) / In-Memory Cache")]
+            LocalStorage["Local File Storage (`artifacts/`, `datasets/`)"]
+        end
+    end
+
+    subgraph "External Cloud Services (Optional / Managed)"
+        CloudLLM["Cloud LLM Providers (Google Gemini / Groq / Cloudflare)"]
+        CloudStorage["S3 / MinIO / Supabase Storage (Port 9000 / HTTPS)"]
+        ClerkSSO["Clerk / Supabase Authentication Services"]
+    end
+
+    Browser -->|"HTTP :5173 / :8000"| Nginx
+    Nginx --> Uvicorn
+    Uvicorn --> FastAPIRouters
+    FastAPIRouters --> BackgroundWorker
+    FastAPIRouters --> SQLiteDB
+    FastAPIRouters --> RedisInstance
+    FastAPIRouters --> LocalStorage
+    FastAPIRouters -.->|REST API| CloudLLM
+    FastAPIRouters -.->|boto3 / httpx| CloudStorage
+    FastAPIRouters -.->|JWT validation| ClerkSSO

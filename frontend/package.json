@@ -10,6 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@clerk/clerk-react": "^5.61.10",
+    "@clerk/themes": "^2.4.57",
     "@supabase/supabase-js": "^2.117.2",
     "axios": "^1.7.9",
     "lucide-react": "^0.468.0",

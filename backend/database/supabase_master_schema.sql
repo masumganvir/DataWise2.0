@@ -315,19 +315,26 @@ ALTER TABLE public.conversation_messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_decisions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
+-- Security Policy: Dedicated Super-Administrator Role
+-- Dedicated Database Administrator: ONLY masumganvir2006@gmail.com is authorized for administrative DB access.
+CREATE OR REPLACE FUNCTION public.is_database_admin()
+RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER AS $$
+    SELECT LOWER(COALESCE(auth.jwt() ->> 'email', '')) = 'masumganvir2006@gmail.com';
+$$;
+
 -- ------------------------------------------------------------------------------
 -- A. USERS POLICIES
 -- ------------------------------------------------------------------------------
 DROP POLICY IF EXISTS "Users can view their own profile" ON public.users;
 CREATE POLICY "Users can view their own profile"
     ON public.users FOR SELECT
-    USING (auth.uid() = id OR auth.role() = 'service_role');
+    USING (auth.uid() = id OR public.is_database_admin() OR auth.role() = 'service_role');
 
 DROP POLICY IF EXISTS "Users can update their own profile" ON public.users;
 CREATE POLICY "Users can update their own profile"
     ON public.users FOR UPDATE
-    USING (auth.uid() = id OR auth.role() = 'service_role')
-    WITH CHECK (auth.uid() = id OR auth.role() = 'service_role');
+    USING (auth.uid() = id OR public.is_database_admin() OR auth.role() = 'service_role')
+    WITH CHECK (auth.uid() = id OR public.is_database_admin() OR auth.role() = 'service_role');
 
 -- ------------------------------------------------------------------------------
 -- B. PROJECTS POLICIES (Users can only see & manage their own projects)
@@ -335,8 +342,8 @@ CREATE POLICY "Users can update their own profile"
 DROP POLICY IF EXISTS "Users can manage their own projects" ON public.projects;
 CREATE POLICY "Users can manage their own projects"
     ON public.projects FOR ALL
-    USING (auth.uid() = user_id OR auth.role() = 'service_role')
-    WITH CHECK (auth.uid() = user_id OR auth.role() = 'service_role');
+    USING (auth.uid() = user_id OR public.is_database_admin() OR auth.role() = 'service_role')
+    WITH CHECK (auth.uid() = user_id OR public.is_database_admin() OR auth.role() = 'service_role');
 
 -- ------------------------------------------------------------------------------
 -- C. DATASETS & CHILD ENTITIES POLICIES

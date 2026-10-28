@@ -25,6 +25,12 @@ def migrate_db(db_path: str):
             ("latest_model_id", "VARCHAR(36)"),
             ("latest_model_version", "VARCHAR(20)"),
             ("project_metadata", "TEXT DEFAULT '{}'"),
+            ("prompt_a", "TEXT"),
+            ("prompt_b", "TEXT"),
+            ("tuning_mode", "VARCHAR(50) DEFAULT 'hybrid'"),
+            ("locked_parameters", "TEXT DEFAULT '{}'"),
+            ("problem_specification", "TEXT"),
+            ("experiment_plan", "TEXT"),
         ]
         for col_name, col_type in add_cols:
             if col_name not in cols:
@@ -59,6 +65,21 @@ def migrate_db(db_path: str):
             if col_name not in user_cols:
                 cursor.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_type};")
                 print(f"  + Added column 'users.{col_name}'")
+
+    # 4. project_prompts table
+    cursor.execute("PRAGMA table_info(project_prompts);")
+    prompt_cols = {r[1] for r in cursor.fetchall()}
+    if prompt_cols:
+        add_prompt_cols = [
+            ("prompt_a", "TEXT"),
+            ("prompt_b", "TEXT"),
+            ("structured_interpretation", "TEXT"),
+            ("user_confirmed", "BOOLEAN DEFAULT 0"),
+        ]
+        for col_name, col_type in add_prompt_cols:
+            if col_name not in prompt_cols:
+                cursor.execute(f"ALTER TABLE project_prompts ADD COLUMN {col_name} {col_type};")
+                print(f"  + Added column 'project_prompts.{col_name}'")
 
     conn.commit()
     conn.close()

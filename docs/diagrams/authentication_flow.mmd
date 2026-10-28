@@ -1,0 +1,36 @@
+sequenceDiagram
+    autonumber
+    actor User as User / Browser
+    participant UI as React Frontend
+    participant Clerk as Clerk / Supabase Auth
+    participant API as FastAPI Backend
+    participant DB as Database (SQLAlchemy)
+    participant Storage as Storage Service
+
+    User->>UI: Open Application
+    alt Clerk / Supabase SSO Login
+        UI->>Clerk: Authenticate with Google/GitHub/Email
+        Clerk-->>UI: Return JWT / Session Token
+        UI->>API: POST /api/auth/clerk-sync (Bearer Token)
+        API->>API: Verify Clerk JWT Signature & Claims
+        API->>DB: Query or Upsert User Record
+        API-->>UI: Return DataWise User Session & Permissions
+    else Native Email / Password Login
+        UI->>API: POST /api/auth/login (email, password)
+        API->>DB: Query User & Verify Argon2/Bcrypt Hash
+        API-->>UI: Return Access Token (HS256) + User Profile
+    end
+
+    Note over UI, API: Authenticated API Requests
+    UI->>API: GET /api/projects (Header: Authorization Bearer)
+    API->>API: Validate Token & Extract User Context
+    API->>DB: Filter Projects (WHERE organization_id / user_id = current)
+    DB-->>API: Return User Projects
+    API-->>UI: Render User Workspace
+
+    Note over UI, Storage: Secure Artifact Download
+    UI->>API: GET /api/projects/{id}/artifacts/download/{filename}
+    API->>DB: Check Project Ownership
+    API->>Storage: Verify Path within Tenant Namespace
+    Storage-->>API: Stream File Content
+    API-->>UI: Streamed Binary / Zip

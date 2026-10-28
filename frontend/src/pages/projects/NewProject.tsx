@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Upload,
   Sparkles,
@@ -24,6 +24,12 @@ import {
   X,
   Play,
   ChevronRight,
+  Lock,
+  Unlock,
+  SlidersHorizontal,
+  Info,
+  Target,
+  Compass,
 } from 'lucide-react'
 import { projectsApi } from '../../services/api'
 import { authStore } from '../../services/authStore'
@@ -140,19 +146,45 @@ function AmbientParticles() {
 ──────────────────────────────────────────────────────────────── */
 export function NewProject() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
-  // Project Configuration
+  // Project Configuration & Dual Problem Prompts
   const [projectName, setProjectName] = useState('')
   const [prompt, setPrompt] = useState('')
+  const [promptA, setPromptA] = useState('')
+  const [promptB, setPromptB] = useState('')
+  const [currentStage, setCurrentStage] = useState<number>(1)
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false)
 
-  // Advanced Options
+  // Problem Formulation State
+  const [formulationResult, setFormulationResult] = useState<any>(null)
+  const [isFormulating, setIsFormulating] = useState(false)
+
+  // Advanced Options & Objectives
   const [targetColumn, setTargetColumn] = useState('Auto')
   const [taskType, setTaskType] = useState('Auto Detect')
   const [optimizationMetric, setOptimizationMetric] = useState('Auto')
+  const [secondaryMetrics, setSecondaryMetrics] = useState<string[]>(['Precision', 'Recall', 'ROC-AUC'])
+  const [objectiveProfile, setObjectiveProfile] = useState<string>('best_performance')
+  const [validationStrategy, setValidationStrategy] = useState<string>('stratified_kfold')
   const [computeBudget, setComputeBudget] = useState('Balanced')
   const [cvFolds, setCvFolds] = useState(5)
   const [deepLearning, setDeepLearning] = useState('Auto')
+
+  // Stage 4: Hyperparameter Workbench & Tuning Modes
+  const [tuningMode, setTuningMode] = useState<'hybrid' | 'agent' | 'manual'>('hybrid')
+  const [searchStrategy, setSearchStrategy] = useState<'optuna_tpe' | 'randomized'>('optuna_tpe')
+  const [hpoBudget, setHpoBudget] = useState<number>(20)
+  const [selectedAlgorithms, setSelectedAlgorithms] = useState<string[]>([
+    'random_forest_clf',
+    'hist_gradient_boosting_clf',
+    'logistic_regression',
+    'decision_tree_clf',
+  ])
+  const [algorithmSchemas, setAlgorithmSchemas] = useState<any[]>([])
+  const [lockedParameters, setLockedParameters] = useState<Record<string, Record<string, any>>>({})
+  const [userParameters, setUserParameters] = useState<Record<string, Record<string, any>>>({})
+  const [validationNote, setValidationNote] = useState<string>('')
 
   // Dataset State
   const [file, setFile] = useState<File | null>(null)
@@ -179,19 +211,36 @@ export function NewProject() {
   const ensureProjectCreated = async (customName?: string): Promise<string> => {
     if (createdProjectId) return createdProjectId
     const activeName = (customName || projectName || 'New ML Project').trim()
-    const activePrompt = prompt.trim() || `Analyze this dataset and build a high-performance predictive model.`
+    const activePromptA = promptA.trim() || prompt.trim() || 'Analyze dataset and predict outcome.'
+    const activePromptB = promptB.trim() || 'Build a high-performance, calibrated, interpretable model.'
+    const combinedPrompt = `${activePromptA}\n\nSolution Requirements:\n${activePromptB}`
 
     const proj = await projectsApi.create({
       name: activeName,
       description: `Autonomous ML analysis for ${activeName}`,
-      prompt: activePrompt,
+      prompt: combinedPrompt,
+      prompt_a: activePromptA,
+      prompt_b: activePromptB,
+      tuning_mode: tuningMode,
+      locked_parameters: lockedParameters,
       configuration: {
+        prompt_a: activePromptA,
+        prompt_b: activePromptB,
+        tuning_mode: tuningMode,
+        locked_parameters: lockedParameters,
+        user_parameters: userParameters,
+        selected_algorithms: selectedAlgorithms,
+        objective_profile: objectiveProfile,
+        secondary_metrics: secondaryMetrics,
+        validation_strategy: validationStrategy,
         target_column: targetColumn,
         task_type: taskType,
         optimization_metric: optimizationMetric,
         compute_budget: computeBudget,
         cv_folds: cvFolds,
         deep_learning: deepLearning,
+        hpo_budget: hpoBudget,
+        search_strategy: searchStrategy,
       },
     })
     setCreatedProjectId(proj.id)
@@ -287,20 +336,22 @@ export function NewProject() {
     }
   }
 
-  // Load sample dataset
+  // Load sample dataset with realistic Prompts A & B
   const handleLoadSample = async (sampleName: string) => {
     setUploadStatus('uploading')
     setErrorMessage('')
     try {
       let dummyCsv = ''
       let derivedTitle = 'Sample Dataset Analysis'
-      let derivedPrompt = 'Train high-performance predictive model on benchmark data.'
+      let derivedPromptA = ''
+      let derivedPromptB = ''
       let derivedTarget = 'target'
       let derivedTask = 'Classification'
 
       if (sampleName === 'telecom_churn') {
         derivedTitle = 'Telecom Customer Churn'
-        derivedPrompt = 'Analyze subscriber behavior to predict churn and prioritize high-risk accounts.'
+        derivedPromptA = 'Identify customers at high risk of canceling mobile and fiber internet contracts. Churners cost 5x more to acquire than retain, so I need to detect churn early without disturbing loyal subscribers.'
+        derivedPromptB = 'Build an autonomous classification pipeline that calculates churn risk probabilities, generates SHAP explanations for customer success agents, supports an adjustable decision threshold (prioritizing recall > 80%), and outputs a deployable inference API.'
         derivedTarget = 'churn'
         derivedTask = 'Classification'
         dummyCsv =
@@ -314,8 +365,9 @@ export function NewProject() {
             return `CUST_${1000 + i},${Math.floor(Math.random() * 50) + 20},${tenure},${charges},${total},${payment},${Math.floor(Math.random() * 5)},${churn}`
           }).join('\n')
       } else if (sampleName === 'financial_fraud') {
-        derivedTitle = 'Financial Fraud Detection'
-        derivedPrompt = 'Detect fraudulent transactions in high-volume payment streams with low false positive rate.'
+        derivedTitle = 'Credit Card Fraud Detection'
+        derivedPromptA = 'I need to identify fraudulent credit card transactions. Fraud cases are rare (<0.5%), and I want to minimize missed fraud without blocking too many legitimate customers.'
+        derivedPromptB = 'Build a fraud-risk prediction system that produces a risk probability, identifies suspicious transactions, explains the strongest contributing features, supports an adjustable decision threshold, and generates a deployable inference API.'
         derivedTarget = 'is_fraud'
         derivedTask = 'Classification'
         dummyCsv =
@@ -332,7 +384,8 @@ export function NewProject() {
           }).join('\n')
       } else if (sampleName === 'student_performance') {
         derivedTitle = 'Student Exam Performance'
-        derivedPrompt = 'Predict final student exam score based on study hours, attendance, and previous academic records.'
+        derivedPromptA = 'Predict final student exam scores to identify students at risk of failing early in the semester, allowing academic advisors to schedule targeted tutoring.'
+        derivedPromptB = 'Build an interpretable regression model explaining contributing study habits and socioeconomic factors, with error bounds and calibrated confidence intervals.'
         derivedTarget = 'exam_score'
         derivedTask = 'Regression'
         dummyCsv =
@@ -348,7 +401,8 @@ export function NewProject() {
           }).join('\n')
       } else if (sampleName === 'house_prices') {
         derivedTitle = 'Real Estate House Prices'
-        derivedPrompt = 'Forecast residential property prices based on square footage, bedrooms, year built, and neighborhood tier.'
+        derivedPromptA = 'Estimate residential property market prices based on square footage, location tier, construction year, and quality indicators.'
+        derivedPromptB = 'Build a robust regression pipeline minimizing RMSE and MAE, handling non-linear price relationships and neighborhood effects with feature importance.'
         derivedTarget = 'price_k'
         derivedTask = 'Regression'
         dummyCsv =
@@ -365,7 +419,8 @@ export function NewProject() {
           }).join('\n')
       } else if (sampleName === 'image_classification') {
         derivedTitle = 'Visual Object & Defect Classifier'
-        derivedPrompt = 'Train deep convolutional / Vision Transformer models to classify visual classes with high top-1 accuracy.'
+        derivedPromptA = 'Automate manufacturing quality inspection by identifying surface cracks and micro-defects from camera snapshots on the assembly line.'
+        derivedPromptB = 'Train high-accuracy visual classification models with low latency inference to trigger automated sorting alerts.'
         derivedTarget = 'class_label'
         derivedTask = 'Image Classification'
         dummyCsv =
@@ -380,7 +435,9 @@ export function NewProject() {
       }
 
       setProjectName(derivedTitle)
-      setPrompt(derivedPrompt)
+      setPrompt(`${derivedPromptA}\n\n${derivedPromptB}`)
+      setPromptA(derivedPromptA)
+      setPromptB(derivedPromptB)
       setTargetColumn(derivedTarget)
       setTaskType(derivedTask)
 
@@ -392,6 +449,110 @@ export function NewProject() {
     }
   }
 
+  // Auto-load benchmark sample if passed via URL parameter
+  useEffect(() => {
+    const sample = searchParams.get('sample')
+    if (sample && uploadStatus === 'idle' && !file) {
+      handleLoadSample(sample)
+    }
+  }, [searchParams])
+
+  // AI Problem Formulation Handler
+  const handleFormulate = async () => {
+    const activePromptA = promptA.trim() || prompt.trim()
+    const activePromptB = promptB.trim() || prompt.trim()
+    if (!activePromptA && !activePromptB) {
+      setErrorMessage('Please provide both Problem Definition (Prompt A) and Desired Solution (Prompt B).')
+      return
+    }
+    setIsFormulating(true)
+    setErrorMessage('')
+    try {
+      const projId = await ensureProjectCreated()
+      const res = await projectsApi.formulate(projId, {
+        prompt_a: activePromptA,
+        prompt_b: activePromptB,
+      })
+      setFormulationResult(res)
+      if (res.task_type && (taskType === 'Auto Detect' || taskType === 'Auto')) {
+        const fmt = res.task_type.charAt(0).toUpperCase() + res.task_type.slice(1)
+        setTaskType(fmt)
+      }
+      if (res.target_candidate && (targetColumn === 'Auto' || !targetColumn)) {
+        setTargetColumn(res.target_candidate)
+      }
+      if (res.recommended_primary_metric && (optimizationMetric === 'Auto' || !optimizationMetric)) {
+        setOptimizationMetric(res.recommended_primary_metric)
+      }
+      if (res.recommended_secondary_metrics) {
+        setSecondaryMetrics(res.recommended_secondary_metrics)
+      }
+      if (res.selected_algorithm_ids && res.selected_algorithm_ids.length > 0) {
+        setSelectedAlgorithms(res.selected_algorithm_ids)
+      }
+    } catch (err: any) {
+      console.warn('Formulation error:', err)
+      setErrorMessage(err.message || 'Problem formulation failed')
+    } finally {
+      setIsFormulating(false)
+    }
+  }
+
+  // Hyperparameter Schema Loader & Locking Handlers
+  const loadHyperparameterSchemas = async () => {
+    try {
+      const projId = await ensureProjectCreated()
+      const res = await projectsApi.getHyperparameterSchemas(projId, taskType.toLowerCase())
+      if (res?.algorithms) {
+        setAlgorithmSchemas(res.algorithms)
+      }
+    } catch (err) {
+      console.warn('Failed loading hyperparameter schemas:', err)
+    }
+  }
+
+  const toggleLockParameter = (algId: string, paramName: string, defaultValue: any) => {
+    setLockedParameters((prev) => {
+      const copy = { ...prev }
+      if (!copy[algId]) copy[algId] = {}
+      if (paramName in copy[algId]) {
+        delete copy[algId][paramName]
+      } else {
+        copy[algId][paramName] = defaultValue
+      }
+      return copy
+    })
+  }
+
+  const updateLockedParameterValue = (algId: string, paramName: string, value: any) => {
+    setLockedParameters((prev) => ({
+      ...prev,
+      [algId]: {
+        ...(prev[algId] || {}),
+        [paramName]: value,
+      },
+    }))
+  }
+
+  const handleValidateAlgorithmParameters = async (algId: string) => {
+    setValidationNote('')
+    try {
+      const projId = await ensureProjectCreated()
+      const params = lockedParameters[algId] || {}
+      const res = await projectsApi.validateHyperparameters(projId, {
+        algorithm_id: algId,
+        parameters: params,
+      })
+      if (res.valid) {
+        setValidationNote(`✓ Parameters for ${algId} are valid against estimator.`)
+      } else {
+        setValidationNote(`⚠ Parameter error: ${res.error}`)
+      }
+    } catch (err: any) {
+      setValidationNote(`Validation failed: ${err.message}`)
+    }
+  }
+
   // Drag & Drop
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true) }
   const handleDragLeave = () => setIsDragging(false)
@@ -400,62 +561,76 @@ export function NewProject() {
     if (e.dataTransfer.files?.[0]) handleFileUpload(e.dataTransfer.files[0])
   }
 
-  // Primary CTA
+  // Primary CTA: Start Real Training Run
   const handleStartAnalysis = async () => {
     setIsStarting(true)
     setErrorMessage('')
     try {
       let projId = createdProjectId
+      const activePromptA = promptA.trim() || prompt.trim() || 'Analyze dataset and predict target.'
+      const activePromptB = promptB.trim() || 'Build a high-performance, calibrated, interpretable model.'
+      const combinedPrompt = `${activePromptA}\n\nSolution Requirements:\n${activePromptB}`
 
-      // If project wasn't pre-created (no upload), create it now
+      const payloadConfig = {
+        prompt_a: activePromptA,
+        prompt_b: activePromptB,
+        tuning_mode: tuningMode,
+        locked_parameters: lockedParameters,
+        user_parameters: userParameters,
+        selected_algorithms: selectedAlgorithms,
+        objective_profile: objectiveProfile,
+        secondary_metrics: secondaryMetrics,
+        validation_strategy: validationStrategy,
+        hpo_budget: hpoBudget,
+        search_strategy: searchStrategy,
+        target_column: targetColumn,
+        task_type: taskType,
+        optimization_metric: optimizationMetric,
+        compute_budget: computeBudget,
+        cv_folds: cvFolds,
+        deep_learning: deepLearning,
+        dataset_name: datasetMeta?.filename || file?.name || 'dataset.csv',
+        dataset_rows: datasetMeta?.row_count || 1000,
+        dataset_cols: datasetMeta?.column_count || 14,
+      }
+
       if (!projId) {
         const proj = await projectsApi.create({
           name: projectName,
           description: `Autonomous ML analysis for ${projectName}`,
-          prompt,
-          configuration: {
-            target_column: targetColumn,
-            task_type: taskType,
-            optimization_metric: optimizationMetric,
-            compute_budget: computeBudget,
-            cv_folds: cvFolds,
-            deep_learning: deepLearning,
-            dataset_name: datasetMeta?.filename || file?.name || 'dataset.csv',
-            dataset_rows: datasetMeta?.row_count || 1000,
-            dataset_cols: datasetMeta?.column_count || 14,
-          },
+          prompt: combinedPrompt,
+          prompt_a: activePromptA,
+          prompt_b: activePromptB,
+          tuning_mode: tuningMode,
+          locked_parameters: lockedParameters,
+          configuration: payloadConfig,
         })
         projId = proj.id
         authStore.setCurrentProject(proj)
       } else {
-        // Update project with latest config
         await projectsApi.update(projId, {
           name: projectName,
-          configuration: {
-            target_column: targetColumn,
-            task_type: taskType,
-            optimization_metric: optimizationMetric,
-            compute_budget: computeBudget,
-            cv_folds: cvFolds,
-            deep_learning: deepLearning,
-            dataset_name: datasetMeta?.filename || file?.name || 'dataset.csv',
-            dataset_rows: datasetMeta?.row_count || 1000,
-            dataset_cols: datasetMeta?.column_count || 14,
-          },
-        }).catch(() => {}) // non-fatal
+          configuration: payloadConfig,
+        }).catch(() => {})
       }
+
+      // Record approved experiment plan
+      await projectsApi.approvePlan(projId, {
+        project_name: projectName,
+        target: targetColumn,
+        task: taskType,
+        primary_metric: optimizationMetric,
+        prompt_a: activePromptA,
+        prompt_b: activePromptB,
+        tuning_mode: tuningMode,
+        locked_parameters: lockedParameters,
+        selected_algorithms: selectedAlgorithms,
+      }).catch(() => {})
 
       // Start asynchronous LangGraph run
       const runResult = await projectsApi.startRun(projId, {
-        prompt,
-        configuration: {
-          target_column: targetColumn,
-          task_type: taskType,
-          optimization_metric: optimizationMetric,
-          compute_budget: computeBudget,
-          cv_folds: cvFolds,
-          deep_learning: deepLearning,
-        },
+        prompt: combinedPrompt,
+        configuration: payloadConfig,
       })
 
       navigate(`/projects/${projId}/run/${runResult.run_id}`)
@@ -711,502 +886,1060 @@ export function NewProject() {
           </div>
         )}
 
-        {/* ── MAIN 2-COLUMN LAYOUT ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.75fr) minmax(0, 1.25fr)', gap: '24px' }}>
-          {/* ╔════ LEFT COLUMN ════╗ */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            {/* A. Project Name */}
-            <div
-              className="np-card"
-              style={{
-                background: 'rgba(15,23,42,0.7)',
-                backdropFilter: 'blur(20px)',
-                border: '1px solid rgba(99,102,241,0.15)',
-                borderRadius: '20px',
-                padding: '24px 28px',
-                boxShadow: '0 4px 24px rgba(0,0,0,0.2)',
-              }}
-            >
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  fontSize: '0.72rem',
-                  fontWeight: 800,
-                  color: 'var(--primary-light)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.1em',
-                  marginBottom: '12px',
-                }}
-              >
-                <div style={{ width: '20px', height: '20px', borderRadius: '6px', background: 'rgba(99,102,241,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 900 }}>A</div>
-                Project Name
-              </label>
-              <input
-                className="np-input"
-                type="text"
-                value={projectName}
-                onChange={(e) => setProjectName(e.target.value)}
-                placeholder="e.g. Credit Card Fraud Detection, House Price Prediction, Sales Forecasting"
-                style={{
-                  width: '100%',
-                  padding: '13px 18px',
-                  borderRadius: '12px',
-                  background: 'rgba(15,23,42,0.6)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  color: 'var(--text-primary)',
-                  fontSize: '1.05rem',
-                  fontWeight: 700,
-                  outline: 'none',
-                  boxSizing: 'border-box',
-                }}
-              />
-            </div>
-
-            {/* B. Dataset Upload */}
-            <div
-              className="np-card"
-              style={{
-                background: 'rgba(15,23,42,0.7)',
-                backdropFilter: 'blur(20px)',
-                border: '1px solid rgba(99,102,241,0.15)',
-                borderRadius: '20px',
-                padding: '24px 28px',
-                boxShadow: '0 4px 24px rgba(0,0,0,0.2)',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <label
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    fontSize: '0.72rem',
-                    fontWeight: 800,
-                    color: 'var(--primary-light)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.1em',
-                  }}
-                >
-                  <div style={{ width: '20px', height: '20px', borderRadius: '6px', background: 'rgba(99,102,241,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 900 }}>B</div>
-                  Dataset Upload
-                </label>
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    onClick={() => handleLoadSample('telecom_churn')}
-                    disabled={uploadStatus === 'uploading' || uploadStatus === 'profiling'}
-                    style={{
-                      fontSize: '0.72rem',
-                      padding: '5px 11px',
-                      borderRadius: '100px',
-                      background: 'linear-gradient(135deg, rgba(99,102,241,0.15), rgba(99,102,241,0.08))',
-                      border: '1px solid rgba(99,102,241,0.3)',
-                      color: 'var(--primary-light)',
-                      cursor: 'pointer',
-                      fontWeight: 700,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                    }}
-                  >
-                    <Zap size={11} /> Churn
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleLoadSample('financial_fraud')}
-                    disabled={uploadStatus === 'uploading' || uploadStatus === 'profiling'}
-                    style={{
-                      fontSize: '0.72rem',
-                      padding: '5px 11px',
-                      borderRadius: '100px',
-                      background: 'linear-gradient(135deg, rgba(16,185,129,0.15), rgba(16,185,129,0.08))',
-                      border: '1px solid rgba(16,185,129,0.3)',
-                      color: '#34d399',
-                      cursor: 'pointer',
-                      fontWeight: 700,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                    }}
-                  >
-                    <Shield size={11} /> Fraud
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleLoadSample('student_performance')}
-                    disabled={uploadStatus === 'uploading' || uploadStatus === 'profiling'}
-                    style={{
-                      fontSize: '0.72rem',
-                      padding: '5px 11px',
-                      borderRadius: '100px',
-                      background: 'linear-gradient(135deg, rgba(245,158,11,0.15), rgba(245,158,11,0.08))',
-                      border: '1px solid rgba(245,158,11,0.3)',
-                      color: '#fbbf24',
-                      cursor: 'pointer',
-                      fontWeight: 700,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                    }}
-                  >
-                    <FlaskConical size={11} /> Student Exams
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleLoadSample('house_prices')}
-                    disabled={uploadStatus === 'uploading' || uploadStatus === 'profiling'}
-                    style={{
-                      fontSize: '0.72rem',
-                      padding: '5px 11px',
-                      borderRadius: '100px',
-                      background: 'linear-gradient(135deg, rgba(139,92,246,0.15), rgba(139,92,246,0.08))',
-                      border: '1px solid rgba(139,92,246,0.3)',
-                      color: '#c084fc',
-                      cursor: 'pointer',
-                      fontWeight: 700,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                    }}
-                  >
-                    <BarChart3 size={11} /> House Prices
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleLoadSample('image_classification')}
-                    disabled={uploadStatus === 'uploading' || uploadStatus === 'profiling'}
-                    style={{
-                      fontSize: '0.72rem',
-                      padding: '5px 11px',
-                      borderRadius: '100px',
-                      background: 'linear-gradient(135deg, rgba(236,72,153,0.15), rgba(236,72,153,0.08))',
-                      border: '1px solid rgba(236,72,153,0.3)',
-                      color: '#f472b6',
-                      cursor: 'pointer',
-                      fontWeight: 700,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                    }}
-                  >
-                    <Sparkles size={11} /> Image Vision
-                  </button>
-                </div>
-              </div>
-
-              {/* Drag & Drop Zone */}
-              <div
-                className="np-drop"
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-                style={{
-                  border: `2px dashed ${isDragging ? '#6366f1' : 'rgba(255,255,255,0.1)'}`,
-                  borderRadius: '16px',
-                  padding: '40px 20px',
-                  textAlign: 'center',
-                  background: isDragging
-                    ? 'rgba(99,102,241,0.08)'
-                    : 'linear-gradient(135deg, rgba(15,23,42,0.5), rgba(30,41,59,0.3))',
-                  cursor: 'pointer',
-                  position: 'relative',
-                  overflow: 'hidden',
-                }}
-              >
-                {/* subtle grid lines */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    backgroundImage: 'radial-gradient(rgba(99,102,241,0.06) 1px, transparent 1px)',
-                    backgroundSize: '24px 24px',
-                    pointerEvents: 'none',
-                  }}
-                />
-
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".csv,.xlsx,.xls,.json,.parquet,.pq,.png,.jpg,.jpeg,.webp,.zip"
-                  style={{ display: 'none' }}
-                  onChange={(e) => { if (e.target.files?.[0]) handleFileUpload(e.target.files[0]) }}
-                />
-
-                <div
-                  style={{
-                    width: '64px',
-                    height: '64px',
-                    borderRadius: '50%',
-                    background: 'linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.15))',
-                    border: '1px solid rgba(99,102,241,0.3)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    margin: '0 auto 16px auto',
-                    boxShadow: '0 8px 24px rgba(99,102,241,0.2)',
-                  }}
-                >
-                  <Upload size={28} color="#818cf8" />
-                </div>
-
-                <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: '0 0 6px 0', color: '#e2e8f0' }}>
-                  DROP YOUR DATASET OR IMAGES HERE
-                </h3>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0 0 18px 0' }}>
-                  CSV • XLSX • JSON • PARQUET • IMAGES (PNG/JPG/ZIP)
-                </p>
-                <button
-                  type="button"
-                  style={{
-                    background: 'rgba(99,102,241,0.12)',
-                    border: '1px solid rgba(99,102,241,0.3)',
-                    color: 'var(--primary-light)',
-                    padding: '9px 22px',
-                    borderRadius: '10px',
-                    fontSize: '0.84rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Browse Files
-                </button>
-              </div>
-
-              {/* Upload Status Card */}
-              {uploadStatus !== 'idle' && (
-                <div
-                  className="np-slide-up"
-                  style={{
-                    marginTop: '14px',
-                    padding: '16px 18px',
-                    borderRadius: '14px',
-                    background: uploadStatus === 'error'
-                      ? 'rgba(239,68,68,0.08)'
-                      : uploadStatus === 'ready'
-                      ? 'rgba(16,185,129,0.08)'
-                      : 'rgba(99,102,241,0.08)',
-                    border: `1px solid ${
-                      uploadStatus === 'error'
-                        ? 'rgba(239,68,68,0.25)'
-                        : uploadStatus === 'ready'
-                        ? 'rgba(16,185,129,0.25)'
-                        : 'rgba(99,102,241,0.2)'
-                    }`,
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <div
-                        style={{
-                          width: '36px',
-                          height: '36px',
-                          borderRadius: '9px',
-                          background: 'rgba(99,102,241,0.15)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                      >
-                        <FileSpreadsheet size={18} color="#818cf8" />
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                          {file?.name || datasetMeta?.filename || 'Loading...'}
-                        </div>
-                        <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                          {file ? `${(file.size / 1024).toFixed(1)} KB` : '—'} •{' '}
-                          {datasetMeta
-                            ? `${datasetMeta.row_count?.toLocaleString()} rows, ${datasetMeta.column_count} cols`
-                            : 'Profiling...'}
-                        </div>
-                      </div>
-                    </div>
-
-                    {uploadStatus === 'profiling' && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: 'var(--primary-light)' }}>
-                        <RefreshCw size={14} className="animate-spin" />
-                        <span>Profiling</span>
-                      </div>
-                    )}
-                    {uploadStatus === 'ready' && (
-                      <div className="np-check-pop" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', color: '#34d399', fontWeight: 700 }}>
-                        <CheckCircle2 size={18} />
-                        <span>Ready</span>
-                      </div>
-                    )}
-                    {uploadStatus === 'error' && (
-                      <span style={{ fontSize: '0.8rem', color: '#f87171', fontWeight: 600 }}>Failed</span>
-                    )}
-                  </div>
-
-                  {uploadProgress > 0 && uploadProgress < 100 && (
-                    <div style={{ marginTop: '12px' }}>
-                      <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.06)', borderRadius: '3px', overflow: 'hidden' }}>
-                        <div
-                          style={{
-                            width: `${uploadProgress}%`,
-                            height: '100%',
-                            background: 'linear-gradient(90deg, #6366f1, #8b5cf6)',
-                            borderRadius: '3px',
-                            transition: 'width 0.3s ease',
-                            animationName: 'progressPulse',
-                            animationDuration: '1s',
-                            animationIterationCount: 'infinite',
-                          }}
-                        />
-                      </div>
-                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px', textAlign: 'right' }}>
-                        {uploadProgress}%
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* C. Objective Prompt */}
-            <div
-              className="np-card"
-              style={{
-                background: 'rgba(15,23,42,0.7)',
-                backdropFilter: 'blur(20px)',
-                border: '1px solid rgba(99,102,241,0.15)',
-                borderRadius: '20px',
-                padding: '24px 28px',
-                boxShadow: '0 4px 24px rgba(0,0,0,0.2)',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <label
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    fontSize: '0.72rem',
-                    fontWeight: 800,
-                    color: 'var(--primary-light)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.1em',
-                  }}
-                >
-                  <div style={{ width: '20px', height: '20px', borderRadius: '6px', background: 'rgba(99,102,241,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 900 }}>C</div>
-                  Describe What You Want To Build
-                </label>
-                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.04)', padding: '3px 8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                  ChatGPT-style intent prompt
-                </span>
-              </div>
-
-              <textarea
-                className="np-input"
-                rows={5}
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="e.g. Build an autonomous model with high generalization, optimize F1/RMSE, and explain key feature contributions."
-                style={{
-                  width: '100%',
-                  padding: '14px 18px',
-                  borderRadius: '12px',
-                  background: 'rgba(15,23,42,0.6)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  color: 'var(--text-primary)',
-                  fontSize: '0.92rem',
-                  lineHeight: 1.65,
-                  outline: 'none',
-                  resize: 'vertical',
-                  boxSizing: 'border-box',
-                  fontFamily: 'inherit',
-                }}
-              />
-              <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '8px', display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
-                <span style={{ fontSize: '0.9rem' }}>💡</span>
-                <span>Describe prediction objectives, constraints, preferred metrics, or business context. The orchestrator tailors feature engineering and loss penalties accordingly.</span>
-              </div>
-            </div>
-          </div>
-
-          {/* ╔════ RIGHT COLUMN ════╗ */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            {/* Advanced Configuration Panel */}
-            <div
-              className="np-card"
-              style={{
-                background: 'rgba(15,23,42,0.7)',
-                backdropFilter: 'blur(20px)',
-                border: '1px solid rgba(99,102,241,0.15)',
-                borderRadius: '20px',
-                overflow: 'hidden',
-                boxShadow: '0 4px 24px rgba(0,0,0,0.2)',
-              }}
-            >
+        {/* ── MULTI-STAGE WORKBENCH STEP NAVIGATION ── */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, 1fr)',
+            gap: '12px',
+            background: 'rgba(15,23,42,0.7)',
+            backdropFilter: 'blur(20px)',
+            border: '1px solid rgba(99,102,241,0.2)',
+            borderRadius: '16px',
+            padding: '10px',
+          }}
+        >
+          {[
+            { stage: 1, title: 'Stage 1 — Dataset & Problem', subtitle: 'Upload & Dual Problem Prompts' },
+            { stage: 2, title: 'Stage 2 — Target & Task', subtitle: 'Inference & Target Confirmation' },
+            { stage: 3, title: 'Stage 3 — Objectives', subtitle: 'Profiles & Validation Metrics' },
+            { stage: 4, title: 'Stage 4 — Hyperparameter Workbench', subtitle: 'Hybrid/Manual Tuning & Lock' },
+          ].map((s) => {
+            const isActive = currentStage === s.stage
+            const isCompleted = currentStage > s.stage
+            return (
               <button
+                key={s.stage}
                 type="button"
-                onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
+                onClick={() => {
+                  setCurrentStage(s.stage)
+                  if (s.stage === 4) loadHyperparameterSchemas()
+                }}
                 style={{
-                  width: '100%',
-                  padding: '20px 24px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  background: 'transparent',
-                  border: 'none',
-                  color: 'var(--text-primary)',
+                  padding: '12px 16px',
+                  borderRadius: '12px',
+                  background: isActive
+                    ? 'linear-gradient(135deg, rgba(99,102,241,0.25), rgba(139,92,246,0.18))'
+                    : isCompleted
+                    ? 'rgba(16,185,129,0.08)'
+                    : 'transparent',
+                  border: isActive
+                    ? '1px solid rgba(99,102,241,0.5)'
+                    : isCompleted
+                    ? '1px solid rgba(16,185,129,0.25)'
+                    : '1px solid transparent',
+                  color: isActive ? '#fff' : isCompleted ? '#34d399' : 'var(--text-muted)',
                   cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'all 0.2s ease',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <div
                     style={{
-                      width: '34px',
-                      height: '34px',
-                      borderRadius: '9px',
-                      background: 'linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.15))',
-                      border: '1px solid rgba(99,102,241,0.25)',
+                      width: '26px',
+                      height: '26px',
+                      borderRadius: '7px',
+                      background: isActive
+                        ? '#6366f1'
+                        : isCompleted
+                        ? '#10b981'
+                        : 'rgba(255,255,255,0.08)',
+                      color: '#fff',
+                      fontSize: '0.78rem',
+                      fontWeight: 800,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                     }}
                   >
-                    <Settings2 size={16} color="#818cf8" />
+                    {isCompleted ? '✓' : s.stage}
                   </div>
-                  <div style={{ textAlign: 'left' }}>
-                    <div style={{ fontWeight: 800, fontSize: '0.92rem' }}>Advanced Configuration</div>
-                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '1px' }}>Optional • AUTO by default</div>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: '0.86rem' }}>{s.title}</div>
+                    <div style={{ fontSize: '0.72rem', color: isActive ? 'var(--primary-light)' : 'var(--text-muted)', marginTop: '2px' }}>
+                      {s.subtitle}
+                    </div>
                   </div>
-                </div>
-                <div
-                  style={{
-                    width: '28px',
-                    height: '28px',
-                    borderRadius: '8px',
-                    background: 'rgba(255,255,255,0.05)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'transform 0.2s ease',
-                    transform: isAdvancedOpen ? 'rotate(180deg)' : 'rotate(0)',
-                  }}
-                >
-                  <ChevronDown size={16} />
                 </div>
               </button>
+            )
+          })}
+        </div>
 
-              {isAdvancedOpen && (
+        {/* ══════════════════════════════════════════════════════════════
+            STAGE 1: DATASET AND PROBLEM DEFINITION (DUAL PROMPTS)
+        ══════════════════════════════════════════════════════════════ */}
+        {currentStage === 1 && (
+          <div className="np-slide-up" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.8fr) minmax(0, 1.2fr)', gap: '24px' }}>
+            {/* Left Column: Name, Upload, and Dual Prompts */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* Project Name */}
+              <div
+                className="np-card"
+                style={{
+                  background: 'rgba(15,23,42,0.7)',
+                  backdropFilter: 'blur(20px)',
+                  border: '1px solid rgba(99,102,241,0.15)',
+                  borderRadius: '20px',
+                  padding: '22px 26px',
+                  boxShadow: '0 4px 24px rgba(0,0,0,0.2)',
+                }}
+              >
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    fontSize: '0.72rem',
+                    fontWeight: 800,
+                    color: 'var(--primary-light)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.1em',
+                    marginBottom: '10px',
+                  }}
+                >
+                  <div style={{ width: '20px', height: '20px', borderRadius: '6px', background: 'rgba(99,102,241,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 900 }}>1</div>
+                  Project Name (Preserved & Editable)
+                </label>
+                <input
+                  className="np-input"
+                  type="text"
+                  value={projectName}
+                  onChange={(e) => setProjectName(e.target.value)}
+                  placeholder="e.g. Credit Card Fraud Detection, House Price Prediction, Sales Forecasting"
+                  style={{
+                    width: '100%',
+                    padding: '12px 18px',
+                    borderRadius: '12px',
+                    background: 'rgba(15,23,42,0.6)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    color: 'var(--text-primary)',
+                    fontSize: '1rem',
+                    fontWeight: 700,
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              {/* Dataset Upload */}
+              <div
+                className="np-card"
+                style={{
+                  background: 'rgba(15,23,42,0.7)',
+                  backdropFilter: 'blur(20px)',
+                  border: '1px solid rgba(99,102,241,0.15)',
+                  borderRadius: '20px',
+                  padding: '24px 28px',
+                  boxShadow: '0 4px 24px rgba(0,0,0,0.2)',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: '0.72rem',
+                      fontWeight: 800,
+                      color: 'var(--primary-light)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.1em',
+                    }}
+                  >
+                    <div style={{ width: '20px', height: '20px', borderRadius: '6px', background: 'rgba(99,102,241,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 900 }}>2</div>
+                    Dataset Upload & Benchmarks
+                  </label>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => handleLoadSample('telecom_churn')}
+                      disabled={uploadStatus === 'uploading' || uploadStatus === 'profiling'}
+                      style={{
+                        fontSize: '0.72rem',
+                        padding: '4px 10px',
+                        borderRadius: '100px',
+                        background: 'linear-gradient(135deg, rgba(99,102,241,0.15), rgba(99,102,241,0.08))',
+                        border: '1px solid rgba(99,102,241,0.3)',
+                        color: 'var(--primary-light)',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                    >
+                      <Zap size={11} /> Churn
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleLoadSample('financial_fraud')}
+                      disabled={uploadStatus === 'uploading' || uploadStatus === 'profiling'}
+                      style={{
+                        fontSize: '0.72rem',
+                        padding: '4px 10px',
+                        borderRadius: '100px',
+                        background: 'linear-gradient(135deg, rgba(16,185,129,0.15), rgba(16,185,129,0.08))',
+                        border: '1px solid rgba(16,185,129,0.3)',
+                        color: '#34d399',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                    >
+                      <Shield size={11} /> Fraud
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleLoadSample('student_performance')}
+                      disabled={uploadStatus === 'uploading' || uploadStatus === 'profiling'}
+                      style={{
+                        fontSize: '0.72rem',
+                        padding: '4px 10px',
+                        borderRadius: '100px',
+                        background: 'linear-gradient(135deg, rgba(245,158,11,0.15), rgba(245,158,11,0.08))',
+                        border: '1px solid rgba(245,158,11,0.3)',
+                        color: '#fbbf24',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                    >
+                      <FlaskConical size={11} /> Exams
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleLoadSample('house_prices')}
+                      disabled={uploadStatus === 'uploading' || uploadStatus === 'profiling'}
+                      style={{
+                        fontSize: '0.72rem',
+                        padding: '4px 10px',
+                        borderRadius: '100px',
+                        background: 'linear-gradient(135deg, rgba(139,92,246,0.15), rgba(139,92,246,0.08))',
+                        border: '1px solid rgba(139,92,246,0.3)',
+                        color: '#c084fc',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                    >
+                      <BarChart3 size={11} /> Prices
+                    </button>
+                  </div>
+                </div>
+
+                {/* Drop Zone */}
+                <div
+                  className="np-drop"
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  style={{
+                    border: `2px dashed ${isDragging ? '#6366f1' : 'rgba(255,255,255,0.1)'}`,
+                    borderRadius: '16px',
+                    padding: '30px 20px',
+                    textAlign: 'center',
+                    background: isDragging
+                      ? 'rgba(99,102,241,0.08)'
+                      : 'linear-gradient(135deg, rgba(15,23,42,0.5), rgba(30,41,59,0.3))',
+                    cursor: 'pointer',
+                    position: 'relative',
+                  }}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv,.xlsx,.xls,.json,.parquet,.pq,.png,.jpg,.jpeg,.webp,.zip"
+                    style={{ display: 'none' }}
+                    onChange={(e) => { if (e.target.files?.[0]) handleFileUpload(e.target.files[0]) }}
+                  />
+                  <Upload size={24} color="#818cf8" style={{ margin: '0 auto 10px auto' }} />
+                  <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#e2e8f0' }}>
+                    {file ? file.name : 'Click to Upload Dataset or Drag & Drop'}
+                  </div>
+                  <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                    CSV, XLSX, JSON, Parquet, or Image Tarballs
+                  </div>
+                </div>
+
+                {uploadStatus !== 'idle' && (
+                  <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.82rem' }}>
+                    <span style={{ color: uploadStatus === 'ready' ? '#34d399' : 'var(--primary-light)' }}>
+                      {uploadStatus === 'profiling' ? 'Profiling dataset schema...' : uploadStatus === 'ready' ? `Dataset ready (${datasetMeta?.row_count?.toLocaleString() || 0} rows)` : 'Uploading...'}
+                    </span>
+                    {uploadStatus === 'ready' && <CheckCircle2 size={16} color="#34d399" />}
+                  </div>
+                )}
+              </div>
+
+              {/* MANDATORY PROMPT A: Problem Definition */}
+              <div
+                className="np-card"
+                style={{
+                  background: 'rgba(15,23,42,0.7)',
+                  backdropFilter: 'blur(20px)',
+                  border: '1px solid rgba(99,102,241,0.2)',
+                  borderRadius: '20px',
+                  padding: '24px 28px',
+                  boxShadow: '0 4px 24px rgba(0,0,0,0.2)',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: '0.78rem',
+                      fontWeight: 800,
+                      color: 'var(--primary-light)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.08em',
+                    }}
+                  >
+                    <div style={{ width: '20px', height: '20px', borderRadius: '6px', background: 'rgba(99,102,241,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 900 }}>A</div>
+                    Prompt A — What problem are you trying to solve?
+                  </label>
+                  <span style={{ fontSize: '0.68rem', color: '#818cf8', background: 'rgba(99,102,241,0.12)', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
+                    MANDATORY
+                  </span>
+                </div>
+                <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', margin: '0 0 10px 0' }}>
+                  Describe the business or scientific objective, current workflow limitations, and operational costs of false positives vs. false negatives.
+                </p>
+                <textarea
+                  className="np-input"
+                  rows={4}
+                  value={promptA}
+                  onChange={(e) => setPromptA(e.target.value)}
+                  placeholder="Example: I need to identify fraudulent credit card transactions. Fraud cases are rare, and I want to minimize missed fraud without blocking too many legitimate customers."
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    borderRadius: '12px',
+                    background: 'rgba(15,23,42,0.6)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    color: 'var(--text-primary)',
+                    fontSize: '0.9rem',
+                    lineHeight: 1.5,
+                    outline: 'none',
+                    resize: 'vertical',
+                    boxSizing: 'border-box',
+                    fontFamily: 'inherit',
+                  }}
+                />
+              </div>
+
+              {/* MANDATORY PROMPT B: Desired Solution and Expected Behavior */}
+              <div
+                className="np-card"
+                style={{
+                  background: 'rgba(15,23,42,0.7)',
+                  backdropFilter: 'blur(20px)',
+                  border: '1px solid rgba(99,102,241,0.2)',
+                  borderRadius: '20px',
+                  padding: '24px 28px',
+                  boxShadow: '0 4px 24px rgba(0,0,0,0.2)',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: '0.78rem',
+                      fontWeight: 800,
+                      color: 'var(--primary-light)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.08em',
+                    }}
+                  >
+                    <div style={{ width: '20px', height: '20px', borderRadius: '6px', background: 'rgba(99,102,241,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 900 }}>B</div>
+                    Prompt B — What solution should the AI build, and how should it work?
+                  </label>
+                  <span style={{ fontSize: '0.68rem', color: '#818cf8', background: 'rgba(99,102,241,0.12)', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
+                    MANDATORY
+                  </span>
+                </div>
+                <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', margin: '0 0 10px 0' }}>
+                  Describe expected model outputs (risk probabilities, classification labels), explainability requirements (SHAP), latency limits, and deployment expectations.
+                </p>
+                <textarea
+                  className="np-input"
+                  rows={4}
+                  value={promptB}
+                  onChange={(e) => setPromptB(e.target.value)}
+                  placeholder="Example: Build a fraud-risk prediction system that produces a risk probability, identifies suspicious transactions, explains the strongest contributing features, supports an adjustable decision threshold, and generates a deployable inference API."
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    borderRadius: '12px',
+                    background: 'rgba(15,23,42,0.6)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    color: 'var(--text-primary)',
+                    fontSize: '0.9rem',
+                    lineHeight: 1.5,
+                    outline: 'none',
+                    resize: 'vertical',
+                    boxSizing: 'border-box',
+                    fontFamily: 'inherit',
+                  }}
+                />
+
+                <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={handleFormulate}
+                    disabled={isFormulating}
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(99,102,241,0.3) 0%, rgba(168,85,247,0.25) 100%)',
+                      border: '1px solid rgba(99,102,241,0.5)',
+                      color: '#ffffff',
+                      padding: '12px 24px',
+                      borderRadius: '12px',
+                      fontSize: '0.92rem',
+                      fontWeight: 800,
+                      cursor: isFormulating ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      boxShadow: '0 4px 18px rgba(99,102,241,0.3)',
+                    }}
+                  >
+                    {isFormulating ? <RefreshCw size={17} className="spin" color="#a5b4fc" /> : <Sparkles size={17} color="#fde047" />}
+                    <span>{isFormulating ? 'Agents Profiling Data & Solution...' : '✨ Analyze Dataset & Generate AI Strategy'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* ── AI Structured Interpretation & Algorithm Selection Feedback Box ── */}
+              {formulationResult && (
                 <div
                   className="np-slide-up"
-                  style={{ padding: '0 24px 24px 24px', display: 'flex', flexDirection: 'column', gap: '14px' }}
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(30, 27, 75, 0.45) 0%, rgba(15, 23, 42, 0.8) 100%)',
+                    border: '1px solid rgba(99,102,241,0.35)',
+                    borderRadius: '20px',
+                    padding: '24px 26px',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+                  }}
                 >
-                  <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)' }} />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(99,102,241,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a5b4fc' }}>
+                        <Brain size={18} />
+                      </div>
+                      <div>
+                        <span style={{ fontSize: '0.95rem', fontWeight: 900, color: '#f8fafc' }}>
+                          AI Strategy & Automated Algorithm Portfolio
+                        </span>
+                        <div style={{ fontSize: '0.72rem', color: '#818cf8' }}>
+                          Agents analyzed dataset distributions vs. Prompt A & B requirements
+                        </div>
+                      </div>
+                    </div>
 
-                  {/* Target Column */}
+                    <span style={{ fontSize: '0.68rem', padding: '3px 10px', borderRadius: '100px', background: 'rgba(16,185,129,0.15)', color: '#34d399', border: '1px solid rgba(16,185,129,0.3)', fontWeight: 800 }}>
+                      ✓ Strategy Formulated
+                    </span>
+                  </div>
+
+                  {/* LLM Executive Strategy Rationale */}
+                  {formulationResult.llm_strategy_rationale && (
+                    <div
+                      style={{
+                        background: 'rgba(99,102,241,0.08)',
+                        borderLeft: '3px solid #818cf8',
+                        borderRadius: '0 10px 10px 0',
+                        padding: '12px 16px',
+                        marginBottom: '18px',
+                        fontSize: '0.84rem',
+                        lineHeight: 1.55,
+                        color: '#cbd5e1',
+                      }}
+                    >
+                      <strong style={{ color: '#a5b4fc', display: 'block', marginBottom: '4px', fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                        Agent Intelligence Rationale:
+                      </strong>
+                      {formulationResult.llm_strategy_rationale}
+                    </div>
+                  )}
+
+                  {/* Key Metrics & Objective Diagnosis */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', fontSize: '0.82rem', marginBottom: '18px' }}>
+                    <div style={{ background: 'rgba(255,255,255,0.03)', padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem', display: 'block' }}>INFERRED TASK</span>
+                      <strong style={{ color: '#fff', fontSize: '0.92rem' }}>{formulationResult.task_type || taskType}</strong>
+                    </div>
+                    <div style={{ background: 'rgba(255,255,255,0.03)', padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem', display: 'block' }}>TARGET VARIABLE</span>
+                      <strong style={{ color: '#818cf8', fontSize: '0.92rem' }}>{formulationResult.target_candidate || targetColumn}</strong>
+                    </div>
+                    <div style={{ background: 'rgba(255,255,255,0.03)', padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem', display: 'block' }}>PRIMARY METRIC</span>
+                      <strong style={{ color: '#34d399', fontSize: '0.92rem' }}>{formulationResult.recommended_primary_metric || 'F1-Score'}</strong>
+                    </div>
+                    <div style={{ background: 'rgba(255,255,255,0.03)', padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem', display: 'block' }}>COST CONSIDERATION</span>
+                      <strong style={{ color: '#fbbf24', fontSize: '0.82rem', lineHeight: 1.3, display: 'block', marginTop: '2px' }}>
+                        {formulationResult.cost_considerations?.false_negative_cost ? 'High False-Negative Cost' : 'Balanced Generalization'}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* Automatically Chosen Algorithms with Explanations */}
+                  <div style={{ marginTop: '18px', paddingTop: '16px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <div>
+                        <span style={{ fontSize: '0.86rem', fontWeight: 800, color: '#f8fafc' }}>
+                          Selected Algorithms for Training Portfolio
+                        </span>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                          Automatically chosen for your dataset & problem. Toggle candidates for custom adjustments:
+                        </div>
+                      </div>
+                      <span style={{ fontSize: '0.74rem', color: '#a5b4fc', fontWeight: 700 }}>
+                        {selectedAlgorithms.length} algorithms enabled
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {(formulationResult.recommended_algorithms || [
+                        { id: 'lightgbm_clf', name: 'LightGBM Classifier', category: 'Gradient Boosting', reason: 'High-speed leaf-wise trees tailored for tabular relationships and low inference latency.' },
+                        { id: 'xgboost_clf', name: 'XGBoost Classifier', category: 'Gradient Boosting', reason: 'Regularized gradient boosting to prevent overfitting on structured business features.' },
+                        { id: 'random_forest_clf', name: 'Random Forest Classifier', category: 'Ensemble Bagging', reason: 'Bootstrap aggregation robust against noise, outliers, and varying feature scales.' },
+                        { id: 'hist_gradient_boosting_clf', name: 'HistGradientBoosting', category: 'Gradient Boosting', reason: 'Binned split finding with native handling of missing observations.' },
+                        { id: 'logistic_regression', name: 'Logistic Regression', category: 'Linear Baseline', reason: 'Calibrated baseline providing transparent odds ratios and coefficients.' },
+                      ]).map((alg: any) => {
+                        const isSelected = selectedAlgorithms.includes(alg.id)
+                        return (
+                          <div
+                            key={alg.id}
+                            onClick={() => {
+                              if (isSelected) {
+                                if (selectedAlgorithms.length > 1) {
+                                  setSelectedAlgorithms(selectedAlgorithms.filter((a) => a !== alg.id))
+                                }
+                              } else {
+                                setSelectedAlgorithms([...selectedAlgorithms, alg.id])
+                              }
+                            }}
+                            style={{
+                              padding: '10px 14px',
+                              borderRadius: '10px',
+                              background: isSelected ? 'rgba(99,102,241,0.12)' : 'rgba(255,255,255,0.02)',
+                              border: `1px solid ${isSelected ? 'rgba(99,102,241,0.45)' : 'rgba(255,255,255,0.06)'}`,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'flex-start',
+                              gap: '12px',
+                              transition: 'all 0.15s ease',
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              readOnly
+                              style={{ accentColor: '#6366f1', marginTop: '3px' }}
+                            />
+                            <div style={{ flex: 1 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: '0.86rem', fontWeight: 800, color: isSelected ? '#fff' : '#94a3b8' }}>
+                                  {alg.name}
+                                </span>
+                                {alg.category && (
+                                  <span style={{ fontSize: '0.64rem', padding: '1px 6px', borderRadius: '4px', background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)' }}>
+                                    {alg.category}
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '3px', lineHeight: 1.4 }}>
+                                💡 {alg.reason}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Direct Launch Step-by-Step Action */}
+                  <div style={{ marginTop: '22px', paddingTop: '16px', borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>Tuning Strategy:</span>
+                      <select
+                        value={tuningMode}
+                        onChange={(e) => setTuningMode(e.target.value as any)}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '8px',
+                          background: 'rgba(15,23,42,0.8)',
+                          border: '1px solid rgba(99,102,241,0.3)',
+                          color: '#fff',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                        }}
+                      >
+                        <option value="hybrid">Hybrid Mode (Recommended)</option>
+                        <option value="agent">Autonomous Agent Mode</option>
+                        <option value="manual">Manual Override Mode</option>
+                      </select>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleStartAnalysis}
+                      disabled={isStarting}
+                      style={{
+                        padding: '12px 28px',
+                        borderRadius: '12px',
+                        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                        color: '#fff',
+                        fontWeight: 900,
+                        fontSize: '0.94rem',
+                        border: 'none',
+                        cursor: isStarting ? 'not-allowed' : 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        boxShadow: '0 8px 24px rgba(16,185,129,0.4)',
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      {isStarting ? <RefreshCw size={16} className="spin" /> : <Play size={16} />}
+                      <span>{isStarting ? 'Launching Agents...' : '🚀 Start Step-by-Step AI Pipeline'}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Right Column: Dataset Profiling & Stage 1 Navigation */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* Dataset Profiling Card */}
+              {datasetMeta ? (
+                <div
+                  className="np-card"
+                  style={{
+                    background: 'rgba(15,23,42,0.7)',
+                    backdropFilter: 'blur(20px)',
+                    border: '1px solid rgba(16,185,129,0.2)',
+                    borderRadius: '20px',
+                    padding: '22px 24px',
+                    boxShadow: '0 4px 24px rgba(0,0,0,0.2)',
+                  }}
+                >
+                  <h3 style={{ fontSize: '0.88rem', fontWeight: 800, margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Database size={15} color="#34d399" />
+                    <span style={{ color: '#34d399' }}>Dataset Health & Schema</span>
+                  </h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
+                    {[
+                      { label: 'ROWS', value: datasetMeta.row_count?.toLocaleString() || '—' },
+                      { label: 'COLUMNS', value: datasetMeta.column_count || '—' },
+                      { label: 'MEMORY', value: `${((datasetMeta.memory_usage_bytes || 0) / 1024).toFixed(1)} KB` },
+                      { label: 'DUPLICATES', value: `${datasetMeta.duplicate_rows_count || 0}`, color: datasetMeta.has_duplicates ? '#f87171' : '#34d399' },
+                    ].map((m) => (
+                      <div
+                        key={m.label}
+                        style={{
+                          padding: '12px 14px',
+                          background: 'rgba(15,23,42,0.5)',
+                          borderRadius: '12px',
+                          border: '1px solid rgba(255,255,255,0.06)',
+                        }}
+                      >
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>{m.label}</div>
+                        <div style={{ fontSize: '1.2rem', fontWeight: 800, color: m.color || 'var(--text-primary)', marginTop: '3px' }}>{m.value}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {datasetMeta.target_candidates?.length > 0 && (
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '12px' }}>
+                      <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                        Inferred Target Candidates
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {datasetMeta.target_candidates.map((tc: any) => (
+                          <span
+                            key={tc.column}
+                            className="np-tag"
+                            onClick={() => setTargetColumn(tc.column)}
+                            style={{
+                              fontSize: '0.72rem',
+                              padding: '4px 10px',
+                              borderRadius: '100px',
+                              background: targetColumn === tc.column ? 'rgba(99,102,241,0.35)' : 'rgba(99,102,241,0.1)',
+                              border: `1px solid ${targetColumn === tc.column ? 'rgba(99,102,241,0.6)' : 'rgba(99,102,241,0.2)'}`,
+                              color: targetColumn === tc.column ? '#c7d2fe' : 'var(--primary-light)',
+                              fontWeight: 700,
+                            }}
+                          >
+                            {tc.column} ({Math.round((tc.confidence || 0.9) * 100)}%)
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div
+                  style={{
+                    background: 'rgba(15,23,42,0.4)',
+                    border: '1px solid rgba(255,255,255,0.06)',
+                    borderRadius: '20px',
+                    padding: '24px',
+                    textAlign: 'center',
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  <Database size={32} style={{ margin: '0 auto 12px auto', opacity: 0.5 }} />
+                  <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>No Dataset Uploaded Yet</div>
+                  <div style={{ fontSize: '0.75rem', marginTop: '4px' }}>Upload a dataset or choose a benchmark sample to unlock target profiling and model candidate exploration.</div>
+                </div>
+              )}
+
+              {/* Stage 1 Next Button */}
+              <button
+                type="button"
+                className="np-btn-glow"
+                onClick={() => setCurrentStage(2)}
+                style={{
+                  width: '100%',
+                  padding: '16px 24px',
+                  borderRadius: '16px',
+                  background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)',
+                  color: '#fff',
+                  border: 'none',
+                  fontSize: '1rem',
+                  fontWeight: 800,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '10px',
+                  cursor: 'pointer',
+                  boxShadow: '0 8px 24px rgba(99,102,241,0.35)',
+                }}
+              >
+                <span>Proceed to Stage 2: Target & Task</span>
+                <ArrowRight size={18} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════
+            STAGE 2: TARGET & TASK CONFIRMATION
+        ══════════════════════════════════════════════════════════════ */}
+        {currentStage === 2 && (
+          <div className="np-slide-up" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.8fr) minmax(0, 1.2fr)', gap: '24px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* Target Column Selector */}
+              <div
+                className="np-card"
+                style={{
+                  background: 'rgba(15,23,42,0.7)',
+                  backdropFilter: 'blur(20px)',
+                  border: '1px solid rgba(99,102,241,0.2)',
+                  borderRadius: '20px',
+                  padding: '26px 28px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                  <Target size={20} color="var(--primary-light)" />
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0 }}>Target Column Confirmation</h3>
+                </div>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0 0 16px 0' }}>
+                  Confirm the target column you want to predict. If you are conducting unsupervised clustering or anomaly detection, select "None (Unsupervised)".
+                </p>
+
+                <select
+                  value={targetColumn}
+                  onChange={(e) => setTargetColumn(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    borderRadius: '12px',
+                    background: 'rgba(15,23,42,0.6)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    color: 'var(--text-primary)',
+                    fontSize: '0.92rem',
+                    outline: 'none',
+                  }}
+                >
+                  <option value="Auto">⚡ Auto Detect Target</option>
+                  <option value="none">None — Unsupervised Task (Clustering / Anomaly Detection)</option>
+                  {datasetMeta?.columns?.map((col: any) => (
+                    <option key={col.name} value={col.name}>{col.name} ({col.dtype})</option>
+                  ))}
+                </select>
+
+                {datasetMeta?.target_candidates?.length > 0 && (
+                  <div style={{ marginTop: '16px' }}>
+                    <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: '8px', fontWeight: 700 }}>
+                      AGENT RECOMMENDATIONS:
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      {datasetMeta.target_candidates.map((tc: any) => (
+                        <button
+                          key={tc.column}
+                          type="button"
+                          onClick={() => setTargetColumn(tc.column)}
+                          style={{
+                            padding: '6px 12px',
+                            borderRadius: '8px',
+                            background: targetColumn === tc.column ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.04)',
+                            border: `1px solid ${targetColumn === tc.column ? 'rgba(99,102,241,0.6)' : 'rgba(255,255,255,0.08)'}`,
+                            color: targetColumn === tc.column ? '#c7d2fe' : 'var(--text-secondary)',
+                            fontSize: '0.78rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {tc.column} ({(tc.confidence ? tc.confidence * 100 : 92).toFixed(0)}% confidence)
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Task Type Confirmation */}
+              <div
+                className="np-card"
+                style={{
+                  background: 'rgba(15,23,42,0.7)',
+                  backdropFilter: 'blur(20px)',
+                  border: '1px solid rgba(99,102,241,0.2)',
+                  borderRadius: '20px',
+                  padding: '26px 28px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                  <Compass size={20} color="#818cf8" />
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0 }}>ML Task Formulation</h3>
+                </div>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0 0 16px 0' }}>
+                  Select or confirm the specific mathematical ML task type for your model pipeline.
+                </p>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  {[
+                    { id: 'Classification', label: 'Binary / Multiclass Classification', desc: 'Predict categorical outcomes, risk probabilities, or class tiers.' },
+                    { id: 'Regression', label: 'Continuous Numeric Regression', desc: 'Forecast continuous numeric values (prices, scores, demand).' },
+                    { id: 'Time Series', label: 'Time-Series Forecasting', desc: 'Chronological lag-based sequence prediction without future leakage.' },
+                    { id: 'Clustering', label: 'Unsupervised Clustering', desc: 'Discover geometric clusters using K-Means and DBSCAN.' },
+                    { id: 'Anomaly Detection', label: 'Anomaly & Outlier Detection', desc: 'Identify extreme or suspicious events using Isolation Forest.' },
+                  ].map((t) => {
+                    const isSelected = taskType.toLowerCase().includes(t.id.toLowerCase())
+                    return (
+                      <div
+                        key={t.id}
+                        onClick={() => setTaskType(t.id)}
+                        style={{
+                          padding: '14px 16px',
+                          borderRadius: '12px',
+                          background: isSelected ? 'rgba(99,102,241,0.18)' : 'rgba(15,23,42,0.5)',
+                          border: `1px solid ${isSelected ? 'rgba(99,102,241,0.6)' : 'rgba(255,255,255,0.06)'}`,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <div style={{ fontWeight: 800, fontSize: '0.86rem', color: isSelected ? 'var(--primary-light)' : 'var(--text-primary)' }}>
+                          {t.label}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px', lineHeight: 1.4 }}>
+                          {t.desc}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Unsupervised Guidance Box */}
+              {(taskType.toLowerCase().includes('cluster') || taskType.toLowerCase().includes('anomaly') || targetColumn === 'none') && (
+                <div
+                  className="np-slide-up"
+                  style={{
+                    padding: '16px 20px',
+                    borderRadius: '14px',
+                    background: 'rgba(245,158,11,0.08)',
+                    border: '1px solid rgba(245,158,11,0.3)',
+                    color: '#fbbf24',
+                    fontSize: '0.84rem',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 800, marginBottom: '4px' }}>
+                    <Info size={16} />
+                    <span>Unsupervised ML Task Policy</span>
+                  </div>
+                  For unsupervised learning (clustering or anomaly detection), conventional ground-truth target columns are not required. The engine uses silhouette validation, internal cohesion, and distance geometries to optimize candidates.
+                </div>
+              )}
+            </div>
+
+            {/* Right Column: Leakage Safeguards & Stage 2 Navigation */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div
+                style={{
+                  background: 'rgba(15,23,42,0.7)',
+                  border: '1px solid rgba(16,185,129,0.2)',
+                  borderRadius: '20px',
+                  padding: '24px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                  <Shield size={18} color="#34d399" />
+                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: '#34d399' }}>
+                    Data Leakage Safeguards
+                  </h4>
+                </div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                  Our Data Quality & Leakage Agent ensures:
+                  <ul style={{ margin: '8px 0 0 0', paddingLeft: '18px' }}>
+                    <li>Identifier and constant columns are flagged and pruned.</li>
+                    <li>ColumnTransformers fit solely on training folds — never test data.</li>
+                    <li>Holdout test split remains untouched until final model acceptance.</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button
+                  type="button"
+                  onClick={() => setCurrentStage(1)}
+                  style={{
+                    flex: 1,
+                    padding: '14px',
+                    borderRadius: '14px',
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    color: 'var(--text-secondary)',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  ← Stage 1: Problem
+                </button>
+                <button
+                  type="button"
+                  className="np-btn-glow"
+                  onClick={() => setCurrentStage(3)}
+                  style={{
+                    flex: 1.5,
+                    padding: '14px',
+                    borderRadius: '14px',
+                    background: 'linear-gradient(135deg, #6366f1, #4338ca)',
+                    color: '#fff',
+                    border: 'none',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Stage 3: Objectives →
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════
+            STAGE 3: REQUIREMENTS & OPTIMIZATION OBJECTIVE
+        ══════════════════════════════════════════════════════════════ */}
+        {currentStage === 3 && (
+          <div className="np-slide-up" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.8fr) minmax(0, 1.2fr)', gap: '24px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* Predefined Objective Profiles */}
+              <div
+                className="np-card"
+                style={{
+                  background: 'rgba(15,23,42,0.7)',
+                  backdropFilter: 'blur(20px)',
+                  border: '1px solid rgba(99,102,241,0.2)',
+                  borderRadius: '20px',
+                  padding: '24px 28px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                  <SlidersHorizontal size={20} color="var(--primary-light)" />
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0 }}>Optimization Objective Profiles</h3>
+                </div>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0 0 16px 0' }}>
+                  Select an objective profile aligned with your business criteria. Profiles set metric directions, validation trade-offs, and pruning rules.
+                </p>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+                  {[
+                    { id: 'best_performance', title: 'Best Performance', desc: 'Max ROC-AUC/F1 with deep tree ensembles.', metric: 'F1' },
+                    { id: 'imbalanced_detection', title: 'Imbalanced Fraud', desc: 'Optimizes PR-AUC and recall for rare events.', metric: 'Recall' },
+                    { id: 'fast_inference', title: 'Fast Inference', desc: 'Sub-10ms latency models for real-time APIs.', metric: 'F1' },
+                    { id: 'low_memory', title: 'Low Memory', desc: 'Minimal RAM footprint and compact serialization.', metric: 'F1' },
+                    { id: 'interpretable', title: 'Interpretable Model', desc: 'Linear and decision trees with SHAP transparency.', metric: 'F1' },
+                    { id: 'small_data', title: 'Small Data Safe', desc: 'Heavy regularization to prevent overfitting.', metric: 'F1' },
+                    { id: 'large_scale', title: 'Large Data Scale', desc: 'Histogram gradient boosting with parallel workers.', metric: 'F1' },
+                    { id: 'time_series', title: 'Time Series', desc: 'Rolling-origin temporal walk-forward splits.', metric: 'RMSE' },
+                    { id: 'cost_efficient', title: 'Cost Efficient', desc: 'Capped trial budget and early stopping.', metric: 'F1' },
+                  ].map((p) => {
+                    const isSelected = objectiveProfile === p.id
+                    return (
+                      <div
+                        key={p.id}
+                        onClick={() => {
+                          setObjectiveProfile(p.id)
+                          if (optimizationMetric === 'Auto') setOptimizationMetric(p.metric)
+                        }}
+                        style={{
+                          padding: '12px 14px',
+                          borderRadius: '12px',
+                          background: isSelected ? 'rgba(99,102,241,0.22)' : 'rgba(15,23,42,0.5)',
+                          border: `1px solid ${isSelected ? 'rgba(99,102,241,0.6)' : 'rgba(255,255,255,0.06)'}`,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <div style={{ fontWeight: 800, fontSize: '0.82rem', color: isSelected ? 'var(--primary-light)' : 'var(--text-primary)' }}>
+                          {p.title}
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px', lineHeight: 1.3 }}>
+                          {p.desc}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Primary & Secondary Metrics Configuration */}
+              <div
+                className="np-card"
+                style={{
+                  background: 'rgba(15,23,42,0.7)',
+                  backdropFilter: 'blur(20px)',
+                  border: '1px solid rgba(99,102,241,0.2)',
+                  borderRadius: '20px',
+                  padding: '24px 28px',
+                }}
+              >
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 700 }}>TARGET COLUMN</label>
+                    <label style={{ display: 'block', fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 700 }}>
+                      PRIMARY OPTIMIZATION METRIC
+                    </label>
                     <select
-                      value={targetColumn}
-                      onChange={(e) => setTargetColumn(e.target.value)}
+                      value={optimizationMetric}
+                      onChange={(e) => setOptimizationMetric(e.target.value)}
                       style={{
                         width: '100%',
                         padding: '10px 14px',
@@ -1218,260 +1951,627 @@ export function NewProject() {
                         outline: 'none',
                       }}
                     >
-                      <option value="Auto">⚡ Auto Detect Target</option>
-                      {datasetMeta?.columns?.map((col: any) => (
-                        <option key={col.name} value={col.name}>{col.name} ({col.dtype})</option>
-                      ))}
+                      <option value="Auto">⚡ Auto (Based on Profile)</option>
+                      <option value="F1">F1-Score (Balanced Precision/Recall)</option>
+                      <option value="ROC-AUC">ROC-AUC (Ranking & Calibration)</option>
+                      <option value="Balanced Accuracy">Balanced Accuracy (Imbalanced Classes)</option>
+                      <option value="Recall">Recall (Minimize Missed Positives)</option>
+                      <option value="Precision">Precision (Minimize False Alerts)</option>
+                      <option value="RMSE">RMSE (Regression Penalty)</option>
+                      <option value="MAE">MAE (Median Absolute Error)</option>
+                      <option value="R²">R² Score (Variance Explained)</option>
+                      <option value="Silhouette">Silhouette (Clustering Cohesion)</option>
                     </select>
                   </div>
 
-                  {/* Task Type + Metric */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 700 }}>TASK TYPE</label>
-                      <select
-                        value={taskType}
-                        onChange={(e) => setTaskType(e.target.value)}
-                        style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-primary)', fontSize: '0.84rem', outline: 'none' }}
-                      >
-                        <option>Auto Detect</option>
-                        <option>Classification</option>
-                        <option>Regression</option>
-                        <option>Clustering</option>
-                        <option>Time Series</option>
-                        <option>Anomaly Detection</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 700 }}>METRIC</label>
-                      <select
-                        value={optimizationMetric}
-                        onChange={(e) => setOptimizationMetric(e.target.value)}
-                        style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-primary)', fontSize: '0.84rem', outline: 'none' }}
-                      >
-                        <option value="Auto">Auto</option>
-                        <option value="F1">F1-Score</option>
-                        <option value="ROC-AUC">ROC-AUC</option>
-                        <option value="Recall">Recall</option>
-                        <option value="Precision">Precision</option>
-                        <option value="RMSE">RMSE</option>
-                        <option value="R²">R² Score</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Compute Budget + CV Folds */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 700 }}>COMPUTE BUDGET</label>
-                      <select
-                        value={computeBudget}
-                        onChange={(e) => setComputeBudget(e.target.value)}
-                        style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-primary)', fontSize: '0.84rem', outline: 'none' }}
-                      >
-                        <option>Low (Fast ~15s)</option>
-                        <option value="Balanced">Balanced (~45s)</option>
-                        <option>High (Deep ~120s)</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 700 }}>CV FOLDS</label>
-                      <input
-                        type="number"
-                        min={2} max={10}
-                        value={cvFolds}
-                        onChange={(e) => setCvFolds(Number(e.target.value))}
-                        style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-primary)', fontSize: '0.84rem', outline: 'none', boxSizing: 'border-box' }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Deep Learning */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 700 }}>DEEP LEARNING</label>
+                    <label style={{ display: 'block', fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 700 }}>
+                      VALIDATION SPLIT METHOD
+                    </label>
                     <select
-                      value={deepLearning}
-                      onChange={(e) => setDeepLearning(e.target.value)}
-                      style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-primary)', fontSize: '0.84rem', outline: 'none' }}
-                    >
-                      <option>Auto</option>
-                      <option>Enabled (MLP/TabNet)</option>
-                      <option>Disabled</option>
-                    </select>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Dataset Profiling Card */}
-            {datasetMeta && (
-              <div
-                className="np-card np-slide-up"
-                style={{
-                  background: 'rgba(15,23,42,0.7)',
-                  backdropFilter: 'blur(20px)',
-                  border: '1px solid rgba(16,185,129,0.2)',
-                  borderRadius: '20px',
-                  padding: '22px 24px',
-                  boxShadow: '0 4px 24px rgba(0,0,0,0.2)',
-                }}
-              >
-                <h3 style={{ fontSize: '0.88rem', fontWeight: 800, margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Database size={15} color="#34d399" />
-                  <span style={{ color: '#34d399' }}>Dataset Health & Schema</span>
-                </h3>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
-                  {[
-                    { label: 'ROWS', value: datasetMeta.row_count?.toLocaleString() || '—' },
-                    { label: 'COLUMNS', value: datasetMeta.column_count || '—' },
-                    { label: 'MEMORY', value: `${((datasetMeta.memory_usage_bytes || 0) / 1024).toFixed(1)} KB` },
-                    { label: 'DUPLICATES', value: `${datasetMeta.duplicate_rows_count || 0}`, color: datasetMeta.has_duplicates ? '#f87171' : '#34d399' },
-                  ].map((m) => (
-                    <div
-                      key={m.label}
+                      value={validationStrategy}
+                      onChange={(e) => setValidationStrategy(e.target.value)}
                       style={{
-                        padding: '12px 14px',
-                        background: 'rgba(15,23,42,0.5)',
-                        borderRadius: '12px',
-                        border: '1px solid rgba(255,255,255,0.06)',
+                        width: '100%',
+                        padding: '10px 14px',
+                        borderRadius: '10px',
+                        background: 'rgba(15,23,42,0.6)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        color: 'var(--text-primary)',
+                        fontSize: '0.85rem',
+                        outline: 'none',
                       }}
                     >
-                      <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>{m.label}</div>
-                      <div style={{ fontSize: '1.2rem', fontWeight: 800, color: m.color || 'var(--text-primary)', marginTop: '3px' }}>{m.value}</div>
-                    </div>
-                  ))}
+                      <option value="stratified_kfold">Stratified K-Fold (Preserve Class Ratios)</option>
+                      <option value="kfold">Standard K-Fold Cross-Validation</option>
+                      <option value="time_series_split">TimeSeriesSplit (Rolling Walk-Forward)</option>
+                    </select>
+                  </div>
                 </div>
 
-                {datasetMeta.target_candidates?.length > 0 && (
-                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '12px' }}>
-                    <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                      Target Candidates Detected
-                    </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                      {datasetMeta.target_candidates.map((tc: any) => (
-                        <span
-                          key={tc.column}
-                          className="np-tag"
-                          onClick={() => setTargetColumn(tc.column)}
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: '8px', fontWeight: 700 }}>
+                    SECONDARY REPORTED METRICS
+                  </label>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {['Precision', 'Recall', 'ROC-AUC', 'Log Loss', 'Balanced Accuracy', 'MAE'].map((m) => {
+                      const isChecked = secondaryMetrics.includes(m)
+                      return (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => {
+                            if (isChecked) {
+                              setSecondaryMetrics(secondaryMetrics.filter((x) => x !== m))
+                            } else {
+                              setSecondaryMetrics([...secondaryMetrics, m])
+                            }
+                          }}
                           style={{
-                            fontSize: '0.72rem',
-                            padding: '4px 10px',
+                            padding: '5px 12px',
                             borderRadius: '100px',
-                            background: targetColumn === tc.column ? 'rgba(99,102,241,0.35)' : 'rgba(99,102,241,0.1)',
-                            border: `1px solid ${targetColumn === tc.column ? 'rgba(99,102,241,0.6)' : 'rgba(99,102,241,0.2)'}`,
-                            color: targetColumn === tc.column ? '#c7d2fe' : 'var(--primary-light)',
+                            background: isChecked ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.04)',
+                            border: `1px solid ${isChecked ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.08)'}`,
+                            color: isChecked ? '#c7d2fe' : 'var(--text-muted)',
+                            fontSize: '0.75rem',
                             fontWeight: 700,
+                            cursor: 'pointer',
                           }}
                         >
-                          {tc.column} ({Math.round((tc.confidence || 0.9) * 100)}%)
-                        </span>
-                      ))}
-                    </div>
+                          {isChecked ? '✓ ' : '+ '}{m}
+                        </button>
+                      )
+                    })}
                   </div>
-                )}
+                </div>
               </div>
-            )}
+            </div>
 
-            {/* ─── PRIMARY CTA BUTTON ─── */}
-            <button
-              type="button"
-              className="np-btn-glow"
-              onClick={handleStartAnalysis}
-              disabled={isStarting}
-              style={{
-                width: '100%',
-                padding: '18px 28px',
-                borderRadius: '16px',
-                background: isStarting
-                  ? 'linear-gradient(135deg, rgba(99,102,241,0.6), rgba(67,56,202,0.6))'
-                  : 'linear-gradient(135deg, #6366f1 0%, #4338ca 50%, #7c3aed 100%)',
-                color: '#fff',
-                border: 'none',
-                fontSize: '1.08rem',
-                fontWeight: 900,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '12px',
-                cursor: isStarting ? 'not-allowed' : 'pointer',
-                boxShadow: '0 8px 30px rgba(99,102,241,0.45)',
-                letterSpacing: '0.01em',
-                position: 'relative',
-                overflow: 'hidden',
-              }}
-            >
-              {/* shimmer overlay */}
-              {!isStarting && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    background: 'linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.12) 50%, transparent 60%)',
-                    backgroundSize: '200% 100%',
-                    animationName: 'shimmer',
-                    animationDuration: '2.5s',
-                    animationTimingFunction: 'ease',
-                    animationIterationCount: 'infinite',
-                    pointerEvents: 'none',
-                  }}
-                />
-              )}
-
-              {isStarting ? (
-                <>
-                  <RefreshCw size={22} className="animate-spin" />
-                  <span>Launching Multi-Agent Graph...</span>
-                </>
-              ) : (
-                <>
-                  <Play size={20} />
-                  <span>Start AI Analysis</span>
-                  <ArrowRight size={20} />
-                </>
-              )}
-            </button>
-
-            {/* Pipeline Steps Info */}
-            <div
-              style={{
-                padding: '16px 20px',
-                borderRadius: '14px',
-                background: 'rgba(15,23,42,0.4)',
-                border: '1px solid rgba(255,255,255,0.06)',
-              }}
-            >
-              <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>
-                17-Stage Pipeline
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
-                {[
-                  'Data Profiling & Quality Audit',
-                  'Outlier Analysis (IQR + Isolation Forest)',
-                  'Preprocessing & Feature Engineering',
-                  'Target Detection & Task Classification',
-                  'Baseline → Candidate → HPO Model Training',
-                  'Bayesian Hyperparameter Optimization',
-                  'Evaluation & Generalization Check',
-                  'Notebook + HTML/PDF Report Generation',
-                ].map((step, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                    <div
+            {/* Right Column: Compute & Stage 3 Navigation */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div
+                style={{
+                  background: 'rgba(15,23,42,0.7)',
+                  border: '1px solid rgba(99,102,241,0.15)',
+                  borderRadius: '20px',
+                  padding: '24px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+                  <Cpu size={18} color="var(--primary-light)" />
+                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800 }}>
+                    Compute & Cross-Validation
+                  </h4>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '4px' }}>CV FOLDS</label>
+                    <input
+                      type="number"
+                      min={2}
+                      max={10}
+                      value={cvFolds}
+                      onChange={(e) => setCvFolds(Number(e.target.value))}
                       style={{
-                        width: '5px',
-                        height: '5px',
-                        borderRadius: '50%',
-                        background: `hsl(${220 + i * 20}, 80%, 65%)`,
-                        flexShrink: 0,
+                        width: '100%',
+                        padding: '10px 14px',
+                        borderRadius: '10px',
+                        background: 'rgba(15,23,42,0.6)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        color: 'var(--text-primary)',
+                        fontSize: '0.85rem',
+                        boxSizing: 'border-box',
                       }}
                     />
-                    <span>{step}</span>
                   </div>
-                ))}
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '4px' }}>COMPUTE BUDGET</label>
+                    <select
+                      value={computeBudget}
+                      onChange={(e) => setComputeBudget(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '10px 14px',
+                        borderRadius: '10px',
+                        background: 'rgba(15,23,42,0.6)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        color: 'var(--text-primary)',
+                        fontSize: '0.85rem',
+                        outline: 'none',
+                      }}
+                    >
+                      <option>Low (Fast ~15s)</option>
+                      <option value="Balanced">Balanced (~45s)</option>
+                      <option>High (Deep ~120s)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button
+                  type="button"
+                  onClick={() => setCurrentStage(2)}
+                  style={{
+                    flex: 1,
+                    padding: '14px',
+                    borderRadius: '14px',
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    color: 'var(--text-secondary)',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  ← Stage 2: Target
+                </button>
+                <button
+                  type="button"
+                  className="np-btn-glow"
+                  onClick={() => {
+                    setCurrentStage(4)
+                    loadHyperparameterSchemas()
+                  }}
+                  style={{
+                    flex: 1.5,
+                    padding: '14px',
+                    borderRadius: '14px',
+                    background: 'linear-gradient(135deg, #6366f1, #4338ca)',
+                    color: '#fff',
+                    border: 'none',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Stage 4: HPO Workbench →
+                </button>
               </div>
             </div>
           </div>
-        </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════
+            STAGE 4: INTERACTIVE HYPERPARAMETER WORKBENCH & TUNING
+        ══════════════════════════════════════════════════════════════ */}
+        {currentStage === 4 && (
+          <div className="np-slide-up" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.8fr) minmax(0, 1.2fr)', gap: '24px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* Tuning Modes: Hybrid, Agent, Manual */}
+              <div
+                className="np-card"
+                style={{
+                  background: 'rgba(15,23,42,0.7)',
+                  backdropFilter: 'blur(20px)',
+                  border: '1px solid rgba(99,102,241,0.2)',
+                  borderRadius: '20px',
+                  padding: '24px 28px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                  <Sliders size={20} color="var(--primary-light)" />
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0 }}>Tuning Execution Mode</h3>
+                </div>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0 0 16px 0' }}>
+                  Choose whether you want the agent to guide optimization, lock your custom values, or run strictly manual trials.
+                </p>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+                  {[
+                    { id: 'hybrid', title: 'Hybrid Mode (Recommended)', desc: 'Lock critical parameters; agents optimize remaining search space.', badge: 'Default' },
+                    { id: 'agent', title: 'Agent Mode', desc: 'Autonomous algorithm choice, candidate spaces, and resource budgets.', badge: 'Autonomous' },
+                    { id: 'manual', title: 'Manual Mode', desc: 'Execute strictly user-selected candidates and locked parameter grids.', badge: 'User Driven' },
+                  ].map((m) => {
+                    const isSelected = tuningMode === m.id
+                    return (
+                      <div
+                        key={m.id}
+                        onClick={() => setTuningMode(m.id as any)}
+                        style={{
+                          padding: '14px 16px',
+                          borderRadius: '12px',
+                          background: isSelected ? 'rgba(99,102,241,0.2)' : 'rgba(15,23,42,0.5)',
+                          border: `1px solid ${isSelected ? 'rgba(99,102,241,0.6)' : 'rgba(255,255,255,0.06)'}`,
+                          cursor: 'pointer',
+                          position: 'relative',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.85rem', fontWeight: 800, color: isSelected ? '#fff' : 'var(--text-primary)' }}>
+                            {m.title}
+                          </span>
+                          <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(99,102,241,0.2)', color: 'var(--primary-light)', fontWeight: 700 }}>
+                            {m.badge}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '6px', lineHeight: 1.4 }}>
+                          {m.desc}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Algorithm Family Portfolio Selection */}
+              <div
+                className="np-card"
+                style={{
+                  background: 'rgba(15,23,42,0.7)',
+                  backdropFilter: 'blur(20px)',
+                  border: '1px solid rgba(99,102,241,0.2)',
+                  borderRadius: '20px',
+                  padding: '24px 28px',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <h3 style={{ fontSize: '0.98rem', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Layers size={17} color="var(--primary-light)" />
+                    Algorithm Candidates for Training
+                  </h3>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                    {selectedAlgorithms.length} algorithms selected
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  {[
+                    { id: 'random_forest_clf', label: 'Random Forest (Ensemble Trees)' },
+                    { id: 'hist_gradient_boosting_clf', label: 'HistGradientBoosting (Fast GBDT)' },
+                    { id: 'logistic_regression', label: 'Logistic / Ridge Regression (Linear)' },
+                    { id: 'decision_tree_clf', label: 'Decision Tree (Interpretable Baseline)' },
+                    { id: 'lightgbm_clf', label: 'LightGBM (Leaf-wise Gradient Boosting)' },
+                    { id: 'xgboost_clf', label: 'XGBoost (Extreme Gradient Boosting)' },
+                  ].map((alg) => {
+                    const isChecked = selectedAlgorithms.includes(alg.id)
+                    return (
+                      <div
+                        key={alg.id}
+                        onClick={() => {
+                          if (isChecked) {
+                            if (selectedAlgorithms.length > 1) {
+                              setSelectedAlgorithms(selectedAlgorithms.filter((a) => a !== alg.id))
+                            }
+                          } else {
+                            setSelectedAlgorithms([...selectedAlgorithms, alg.id])
+                          }
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                          padding: '10px 14px',
+                          borderRadius: '10px',
+                          background: isChecked ? 'rgba(99,102,241,0.12)' : 'rgba(15,23,42,0.4)',
+                          border: `1px solid ${isChecked ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.06)'}`,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <input type="checkbox" checked={isChecked} readOnly style={{ accentColor: '#6366f1' }} />
+                        <span style={{ fontSize: '0.82rem', fontWeight: isChecked ? 700 : 500, color: isChecked ? '#fff' : 'var(--text-secondary)' }}>
+                          {alg.label}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Interactive Parameter Workbench with Locking (Padlock) */}
+              <div
+                className="np-card"
+                style={{
+                  background: 'rgba(15,23,42,0.7)',
+                  backdropFilter: 'blur(20px)',
+                  border: '1px solid rgba(99,102,241,0.2)',
+                  borderRadius: '20px',
+                  padding: '24px 28px',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                  <div>
+                    <h3 style={{ fontSize: '0.98rem', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Lock size={16} color="#fbbf24" />
+                      Hyperparameter Space & Parameter Locking
+                    </h3>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                      Lock specific hyperparameters to enforce exact user choices. Unlocked parameters are tuned autonomously via Bayesian Optuna TPESampler.
+                    </p>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {/* Parameter controls for Random Forest */}
+                  <div style={{ background: 'rgba(15,23,42,0.5)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                      <strong style={{ fontSize: '0.85rem', color: 'var(--primary-light)' }}>Random Forest Estimator</strong>
+                      <button
+                        type="button"
+                        onClick={() => handleValidateAlgorithmParameters('random_forest_clf')}
+                        style={{
+                          fontSize: '0.7rem',
+                          background: 'rgba(99,102,241,0.15)',
+                          border: '1px solid rgba(99,102,241,0.3)',
+                          color: 'var(--primary-light)',
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Validate Parameters
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                      {/* n_estimators */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '8px' }}>
+                        <div>
+                          <div style={{ fontSize: '0.75rem', fontWeight: 700 }}>n_estimators</div>
+                          <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                            {lockedParameters['random_forest_clf']?.['n_estimators'] !== undefined
+                              ? `Locked: ${lockedParameters['random_forest_clf']['n_estimators']}`
+                              : 'Auto Search: [50, 200]'}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => toggleLockParameter('random_forest_clf', 'n_estimators', 100)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: lockedParameters['random_forest_clf']?.['n_estimators'] !== undefined ? '#fbbf24' : 'var(--text-muted)',
+                          }}
+                        >
+                          {lockedParameters['random_forest_clf']?.['n_estimators'] !== undefined ? <Lock size={16} /> : <Unlock size={16} />}
+                        </button>
+                      </div>
+
+                      {/* max_depth */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '8px' }}>
+                        <div>
+                          <div style={{ fontSize: '0.75rem', fontWeight: 700 }}>max_depth</div>
+                          <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                            {lockedParameters['random_forest_clf']?.['max_depth'] !== undefined
+                              ? `Locked: ${lockedParameters['random_forest_clf']['max_depth']}`
+                              : 'Auto Search: [4, 16]'}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => toggleLockParameter('random_forest_clf', 'max_depth', 8)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: lockedParameters['random_forest_clf']?.['max_depth'] !== undefined ? '#fbbf24' : 'var(--text-muted)',
+                          }}
+                        >
+                          {lockedParameters['random_forest_clf']?.['max_depth'] !== undefined ? <Lock size={16} /> : <Unlock size={16} />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Parameter controls for Gradient Boosting */}
+                  <div style={{ background: 'rgba(15,23,42,0.5)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                      <strong style={{ fontSize: '0.85rem', color: '#34d399' }}>HistGradientBoosting Estimator</strong>
+                      <button
+                        type="button"
+                        onClick={() => handleValidateAlgorithmParameters('hist_gradient_boosting_clf')}
+                        style={{
+                          fontSize: '0.7rem',
+                          background: 'rgba(16,185,129,0.15)',
+                          border: '1px solid rgba(16,185,129,0.3)',
+                          color: '#34d399',
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Validate Parameters
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                      {/* learning_rate */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '8px' }}>
+                        <div>
+                          <div style={{ fontSize: '0.75rem', fontWeight: 700 }}>learning_rate</div>
+                          <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                            {lockedParameters['hist_gradient_boosting_clf']?.['learning_rate'] !== undefined
+                              ? `Locked: ${lockedParameters['hist_gradient_boosting_clf']['learning_rate']}`
+                              : 'Auto Search: [0.01, 0.2]'}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => toggleLockParameter('hist_gradient_boosting_clf', 'learning_rate', 0.05)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: lockedParameters['hist_gradient_boosting_clf']?.['learning_rate'] !== undefined ? '#fbbf24' : 'var(--text-muted)',
+                          }}
+                        >
+                          {lockedParameters['hist_gradient_boosting_clf']?.['learning_rate'] !== undefined ? <Lock size={16} /> : <Unlock size={16} />}
+                        </button>
+                      </div>
+
+                      {/* max_iter */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '8px' }}>
+                        <div>
+                          <div style={{ fontSize: '0.75rem', fontWeight: 700 }}>max_iter</div>
+                          <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                            {lockedParameters['hist_gradient_boosting_clf']?.['max_iter'] !== undefined
+                              ? `Locked: ${lockedParameters['hist_gradient_boosting_clf']['max_iter']}`
+                              : 'Auto Search: [50, 150]'}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => toggleLockParameter('hist_gradient_boosting_clf', 'max_iter', 100)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: lockedParameters['hist_gradient_boosting_clf']?.['max_iter'] !== undefined ? '#fbbf24' : 'var(--text-muted)',
+                          }}
+                        >
+                          {lockedParameters['hist_gradient_boosting_clf']?.['max_iter'] !== undefined ? <Lock size={16} /> : <Unlock size={16} />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {validationNote && (
+                    <div style={{ fontSize: '0.78rem', color: validationNote.includes('✓') ? '#34d399' : '#f87171' }}>
+                      {validationNote}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column: Search Strategy & Plan Approval Summary */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* Search Engine Settings */}
+              <div
+                style={{
+                  background: 'rgba(15,23,42,0.7)',
+                  border: '1px solid rgba(99,102,241,0.15)',
+                  borderRadius: '20px',
+                  padding: '24px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+                  <Brain size={18} color="var(--primary-light)" />
+                  <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800 }}>Search Engine & Budget</h4>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '4px' }}>SEARCH STRATEGY</label>
+                    <select
+                      value={searchStrategy}
+                      onChange={(e) => setSearchStrategy(e.target.value as any)}
+                      style={{
+                        width: '100%',
+                        padding: '10px 14px',
+                        borderRadius: '10px',
+                        background: 'rgba(15,23,42,0.6)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        color: 'var(--text-primary)',
+                        fontSize: '0.85rem',
+                        outline: 'none',
+                      }}
+                    >
+                      <option value="optuna_tpe">Optuna Bayesian TPESampler (Recommended)</option>
+                      <option value="randomized">RandomizedSearchCV (Budget Exploration)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                      MAX HPO TRIALS ({hpoBudget} trials)
+                    </label>
+                    <input
+                      type="range"
+                      min={5}
+                      max={50}
+                      step={5}
+                      value={hpoBudget}
+                      onChange={(e) => setHpoBudget(Number(e.target.value))}
+                      style={{ width: '100%', accentColor: '#6366f1' }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Experiment Plan Approval Preview Card */}
+              <div
+                style={{
+                  background: 'rgba(99,102,241,0.06)',
+                  border: '1px solid rgba(99,102,241,0.25)',
+                  borderRadius: '20px',
+                  padding: '24px',
+                }}
+              >
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '0.92rem', fontWeight: 800, color: 'var(--primary-light)' }}>
+                  📋 Experiment Plan Approval Summary
+                </h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.78rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Tuning Mode:</span>
+                    <strong style={{ color: '#fff' }}>{tuningMode.toUpperCase()}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>User Locked Parameters:</span>
+                    <strong style={{ color: Object.keys(lockedParameters).length > 0 ? '#fbbf24' : 'var(--text-muted)' }}>
+                      {Object.keys(lockedParameters).length > 0 ? `${Object.keys(lockedParameters).length} locked` : 'None (Full search)'}
+                    </strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Candidate Algorithms:</span>
+                    <strong style={{ color: '#818cf8' }}>{selectedAlgorithms.length} Selected</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Validation Folds:</span>
+                    <strong style={{ color: '#34d399' }}>{cvFolds}-fold Stratified CV</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Holdout Test Split:</span>
+                    <strong style={{ color: '#34d399' }}>Untouched 20% Holdout</strong>
+                  </div>
+                </div>
+
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '14px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '10px' }}>
+                  Execution will generate real measured trials across all folds with zero hardcoded or fabricated scores.
+                </div>
+              </div>
+
+              {/* Primary CTA: Launch AI Training */}
+              <button
+                type="button"
+                className="np-btn-glow"
+                onClick={handleStartAnalysis}
+                disabled={isStarting}
+                style={{
+                  width: '100%',
+                  padding: '18px 28px',
+                  borderRadius: '16px',
+                  background: isStarting
+                    ? 'linear-gradient(135deg, rgba(99,102,241,0.6), rgba(67,56,202,0.6))'
+                    : 'linear-gradient(135deg, #6366f1 0%, #4338ca 50%, #7c3aed 100%)',
+                  color: '#fff',
+                  border: 'none',
+                  fontSize: '1.05rem',
+                  fontWeight: 900,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '12px',
+                  cursor: isStarting ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 8px 30px rgba(99,102,241,0.45)',
+                }}
+              >
+                {isStarting ? (
+                  <>
+                    <RefreshCw size={20} className="animate-spin" />
+                    <span>Launching Multi-Agent Training...</span>
+                  </>
+                ) : (
+                  <>
+                    <Play size={20} />
+                    <span>Approve Plan & Launch AutoML</span>
+                    <ArrowRight size={20} />
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ── DATASET PREVIEW TABLE ── */}
         {previewData && (

@@ -24,10 +24,12 @@ from httpx import AsyncClient, ASGITransport
 from main import app
 from app.db.models.entities import User, Project
 from app.auth.security import create_access_token
+from app.db.session import init_db
 
 
 @pytest.fixture
 async def test_client():
+    await init_db()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac

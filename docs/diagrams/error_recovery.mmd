@@ -1,0 +1,14 @@
+graph TD
+    Exception["Runtime Failure / Tool Exception Caught"] --> ErrorDetector["ErrorDetector: Normalize & Redact Stack Trace"]
+    ErrorDetector --> ErrorClassifier["ErrorClassifier: Classify into Error Category\n- DATA_TYPE_CONFLICT\n- CONVERGENCE_FAILURE\n- OUT_OF_MEMORY\n- LEAKAGE_DETECTED\n- CORRUPTED_VALUES"]
+    
+    ErrorClassifier --> RootCause["RootCauseAgent: Diagnose Specific Conflict\n(e.g., KNNImputer used on string category)"]
+    RootCause --> CircuitBreaker{"CircuitBreaker & RetryManager Check:\nHas retry limit been reached?"}
+
+    CircuitBreaker -->|Retries Remaining & Under Threshold| RecoveryPlanner["RecoveryPlannerAgent: Formulate Alternative Strategy"]
+    RecoveryPlanner --> RecoveryExecutor["RecoveryExecutor: Apply Pipeline Transformation Repair\n- Switch to SimpleImputer(strategy='most_frequent')\n- Drop high-cardinality/leaking column\n- Downscale model complexity / batch size"]
+    RecoveryExecutor --> RetryStep["Re-execute Failed Stage"]
+
+    CircuitBreaker -->|Threshold Exceeded / Critical Error| SafeFallback["FallbackSupervisorAgent: Safe Fallback State"]
+    SafeFallback --> Rollback["RollbackManager: Restore from Checkpoint Snapshot"]
+    Rollback --> UserEscalation["Escalate to User with Clear Diagnostic Rationale & Guidance"]

@@ -1,0 +1,63 @@
+graph TB
+    subgraph "Frontend Subsystems"
+        AuthPages["Auth (Login, Register, Clerk SSO)"]
+        ProjectWorkspace["NewProject Multi-Stage Workbench (Stages 1-4)"]
+        LiveWorkflowView["LiveWorkflow Stage Visualizer"]
+        ResultsWorkspaceView["ResultsWorkspace & Model Comparison"]
+        AnalysisUI["Deep EDA & Profiling Views"]
+        InferenceUI["Real-time Prediction Agent"]
+    end
+
+    subgraph "API Routers (`app/api/endpoints`)"
+        R_Auth["/auth (JWT, Clerk sync, OAuth)"]
+        R_Projects["/projects (CRUD, dual-prompt, HPO run)"]
+        R_Datasets["/datasets (Upload, sniff, validate, preview)"]
+        R_Analysis["/analysis (Profile, quality, outliers, correlation)"]
+        R_MLAnalysis["/ml-analysis (Train, HPO, readiness, explain)"]
+        R_Inference["/inference (Batch & real-time predict)"]
+        R_Registry["/registry (Model versions, rollback)"]
+        R_Realtime["/realtime (CDC, feature store, drift)"]
+        R_Reports["/reports (HTML, PDF, Markdown, Notebook)"]
+    end
+
+    subgraph "Core Domain & Agent Services"
+        CoordinatorAgent["MultiAgentCoordinator (21+ specialized agents)"]
+        PlannerAgent["AIProjectPlannerAgent"]
+        AutomlEngine["AdaptiveAutoMLEngine"]
+        TechniqueReg["TechniqueRegistry (Estimators & Param Schemas)"]
+        ReadinessChecker["ProductionReadinessChecker"]
+        ArtifactPackager["ArtifactPackager & Zip Builder"]
+    end
+
+    subgraph "Data & Persistence Layer"
+        SQLAlchemyEntities["SQLAlchemy 37 Enterprise Entities (`entities.py`)"]
+        SessionMgr["Database Session Pool (`db/session.py`)"]
+        StorageSvc["StorageService (Namespaced Project Buckets)"]
+        RedisMgr["RedisManager / InMemoryFallbackCache"]
+    end
+
+    ProjectWorkspace --> R_Projects
+    ProjectWorkspace --> R_Datasets
+    LiveWorkflowView --> R_Projects
+    ResultsWorkspaceView --> R_Projects
+    ResultsWorkspaceView --> R_Reports
+    AnalysisUI --> R_Analysis
+    InferenceUI --> R_Inference
+    AuthPages --> R_Auth
+
+    R_Projects --> CoordinatorAgent
+    R_Projects --> AutomlEngine
+    R_Projects --> PlannerAgent
+    R_MLAnalysis --> AutomlEngine
+    R_MLAnalysis --> TechniqueReg
+    R_Analysis --> CoordinatorAgent
+    R_Inference --> AutomlEngine
+    R_Reports --> ArtifactPackager
+
+    CoordinatorAgent --> SQLAlchemyEntities
+    AutomlEngine --> ReadinessChecker
+    AutomlEngine --> ArtifactPackager
+    AutomlEngine --> SQLAlchemyEntities
+    SQLAlchemyEntities --> SessionMgr
+    ArtifactPackager --> StorageSvc
+    R_Projects --> RedisMgr

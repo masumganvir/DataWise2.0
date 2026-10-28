@@ -1,0 +1,108 @@
+{
+  "build_timestamp": "2026-10-27T17:44:57.158638",
+  "project": "DataWise AI",
+  "documentation_version": "1.0.0",
+  "total_reports": 11,
+  "all_valid": true,
+  "reports": {
+    "PDF 1: Technical Whitepaper": {
+      "valid": true,
+      "file_name": "DATAWISE_AI_TECHNICAL_WHITEPAPER.pdf",
+      "file_size_bytes": 1120686,
+      "file_size_kb": 1094.4,
+      "page_count": 8,
+      "extracted_text_chars": 12441,
+      "path": "docs\\reports\\DATAWISE_AI_TECHNICAL_WHITEPAPER.pdf"
+    },
+    "PDF 2: Complete Documentation": {
+      "valid": true,
+      "file_name": "DATAWISE_AI_COMPLETE_DOCUMENTATION.pdf",
+      "file_size_bytes": 741733,
+      "file_size_kb": 724.3,
+      "page_count": 4,
+      "extracted_text_chars": 4306,
+      "path": "docs\\reports\\DATAWISE_AI_COMPLETE_DOCUMENTATION.pdf"
+    },
+    "PDF 3: User Guide": {
+      "valid": true,
+      "file_name": "DATAWISE_AI_USER_GUIDE.pdf",
+      "file_size_bytes": 1513319,
+      "file_size_kb": 1477.9,
+      "page_count": 5,
+      "extracted_text_chars": 3678,
+      "path": "docs\\reports\\DATAWISE_AI_USER_GUIDE.pdf"
+    },
+    "PDF 4: Developer Guide": {
+      "valid": true,
+      "file_name": "DATAWISE_AI_DEVELOPER_GUIDE.pdf",
+      "file_size_bytes": 6480,
+      "file_size_kb": 6.3,
+      "page_count": 3,
+      "extracted_text_chars": 3535,
+      "path": "docs\\reports\\DATAWISE_AI_DEVELOPER_GUIDE.pdf"
+    },
+    "PDF 5: Architecture Report": {
+      "valid": true,
+      "file_name": "DATAWISE_AI_ARCHITECTURE_REPORT.pdf",
+      "file_size_bytes": 337159,
+      "file_size_kb": 329.3,
+      "page_count": 3,
+      "extracted_text_chars": 3196,
+      "path": "docs\\reports\\DATAWISE_AI_ARCHITECTURE_REPORT.pdf"
+    },
+    "PDF 6: ML Methodology Report": {
+      "valid": true,
+      "file_name": "DATAWISE_AI_ML_METHODOLOGY_REPORT.pdf",
+      "file_size_bytes": 372193,
+      "file_size_kb": 363.5,
+      "page_count": 3,
+      "extracted_text_chars": 3208,
+      "path": "docs\\reports\\DATAWISE_AI_ML_METHODOLOGY_REPORT.pdf"
+    },
+    "PDF 7: Security & Privacy Report": {
+      "valid": true,
+      "file_name": "DATAWISE_AI_SECURITY_AND_PRIVACY_REPORT.pdf",
+      "file_size_bytes": 409259,
+      "file_size_kb": 399.7,
+      "page_count": 3,
+      "extracted_text_chars": 2909,
+      "path": "docs\\reports\\DATAWISE_AI_SECURITY_AND_PRIVACY_REPORT.pdf"
+    },
+    "PDF 8: Testing & Validation Report": {
+      "valid": true,
+      "file_name": "DATAWISE_AI_TESTING_AND_VALIDATION_REPORT.pdf",
+      "file_size_bytes": 322700,
+      "file_size_kb": 315.1,
+      "page_count": 3,
+      "extracted_text_chars": 2685,
+      "path": "docs\\reports\\DATAWISE_AI_TESTING_AND_VALIDATION_REPORT.pdf"
+    },
+    "PDF 9: Deployment & Operations Guide": {
+      "valid": true,
+      "file_name": "DATAWISE_AI_DEPLOYMENT_AND_OPERATIONS_GUIDE.pdf",
+      "file_size_bytes": 5198,
+      "file_size_kb": 5.1,
+      "page_count": 2,
+      "extracted_text_chars": 2439,
+      "path": "docs\\reports\\DATAWISE_AI_DEPLOYMENT_AND_OPERATIONS_GUIDE.pdf"
+    },
+    "PDF 10: Research & Roadmap": {
+      "valid": true,
+      "file_name": "DATAWISE_AI_RESEARCH_AND_ROADMAP.pdf",
+      "file_size_bytes": 5414,
+      "file_size_kb": 5.3,
+      "page_count": 2,
+      "extracted_text_chars": 2770,
+      "path": "docs\\reports\\DATAWISE_AI_RESEARCH_AND_ROADMAP.pdf"
+    },
+    "PDF 11: Project Presentation Report": {
+      "valid": true,
+      "file_name": "DATAWISE_AI_PROJECT_PRESENTATION_REPORT.pdf",
+      "file_size_bytes": 1019438,
+      "file_size_kb": 995.5,
+      "page_count": 4,
+      "extracted_text_chars": 2823,
+      "path": "docs\\reports\\DATAWISE_AI_PROJECT_PRESENTATION_REPORT.pdf"
+    }
+  }
+}

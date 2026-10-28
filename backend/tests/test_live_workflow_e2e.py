@@ -4,10 +4,11 @@ import urllib.request
 import pytest
 from fastapi.testclient import TestClient
 
-def _is_server_online(url: str = "http://127.0.0.1:8000/api/projects") -> bool:
+def _is_server_online(host: str = "127.0.0.1", port: int = 8000) -> bool:
+    import socket
     try:
-        with urllib.request.urlopen(url, timeout=0.8) as res:
-            return res.status in (200, 404, 422)
+        with socket.create_connection((host, port), timeout=0.1):
+            return True
     except Exception:
         return False
 

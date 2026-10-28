@@ -52,12 +52,14 @@ from app.db.models.entities import (
     BackgroundJob,
     UsageRecord,
     LegacySession,
+    InfoRecord,
 )
 
 __all__ = [
     "Base",
     "Session",
     "Dataset",
+    "InfoRecord",
     "ConversationMessage",
     "Artifact",
     "UserDecision",

@@ -14,11 +14,14 @@ import {
   WifiOff,
   Sparkles,
   Command,
+  BookOpen,
 } from 'lucide-react'
 import { branding } from '../../config/branding'
 import { authStore } from '../../services/authStore'
 import { projectsApi } from '../../services/api'
 import { Project } from '../../types'
+import { UserButton, useUser, useClerk } from '@clerk/clerk-react'
+import { dark } from '@clerk/themes'
 
 interface TopBarProps {
   onOpenCommandPalette: () => void
@@ -60,10 +63,20 @@ export default function TopBar({ onOpenCommandPalette }: TopBarProps) {
     authStore.setTheme(theme === 'dark' ? 'light' : 'dark')
   }
 
-  const handleLogout = () => {
-    authStore.logout()
+  const { isSignedIn: isClerkSignedIn, user: clerkUser } = useUser()
+  const { signOut: clerkSignOut } = useClerk()
+
+  const handleLogout = async () => {
+    setIsUserMenuOpen(false)
+    try {
+      if (clerkSignOut) {
+        await clerkSignOut()
+      }
+    } catch { /* best effort */ }
+    await authStore.signOut()
     navigate('/login')
   }
+
 
   return (
     <header className="app-topbar">
@@ -314,6 +327,29 @@ export default function TopBar({ onOpenCommandPalette }: TopBarProps) {
           <span>{isOnline ? 'ONLINE' : 'OFFLINE'}</span>
         </div>
 
+        {/* Documentation & Learning Link */}
+        <Link
+          to="/docs"
+          title="NumPy, Pandas, Matplotlib, and Scikit-Learn Documentations & Cheatsheets"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            color: 'var(--text-secondary)',
+            textDecoration: 'none',
+            fontSize: '0.8rem',
+            fontWeight: 600,
+            padding: '5px 10px',
+            borderRadius: '6px',
+            background: 'rgba(99, 102, 241, 0.08)',
+            border: '1px solid rgba(99, 102, 241, 0.25)',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <BookOpen size={14} style={{ color: '#818cf8' }} />
+          <span>Docs & Learning</span>
+        </Link>
+
         {/* Notifications Popover */}
         <div style={{ position: 'relative' }}>
           <button
@@ -424,41 +460,73 @@ export default function TopBar({ onOpenCommandPalette }: TopBarProps) {
         </button>
 
         {/* User Profile Menu */}
-        <div style={{ position: 'relative' }}>
-          <button
-            onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--text-primary)',
-              cursor: 'pointer',
-              padding: '4px',
-            }}
-          >
-            <div
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {isClerkSignedIn ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <UserButton
+                afterSignOutUrl="/login"
+                appearance={{
+                  baseTheme: dark,
+                  variables: {
+                    colorPrimary: '#6366f1',
+                    colorBackground: '#1e293b',
+                    colorText: '#f8fafc',
+                  },
+                }}
+              />
+              <div
+                className="hidden md:block text-left"
+                style={{ cursor: 'pointer' }}
+                onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+              >
+                <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>{user?.name || clerkUser?.fullName || 'User'}</div>
+                <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{user?.role?.toUpperCase() || 'DATA SCIENTIST'}</div>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
               style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '50%',
-                background: 'linear-gradient(135deg, #6366f1 0%, #ec4899 100%)',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                fontWeight: 700,
-                fontSize: '0.85rem',
-                color: '#fff',
+                gap: '8px',
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-primary)',
+                cursor: 'pointer',
+                padding: '4px',
               }}
             >
-              {user?.name?.charAt(0) || 'U'}
-            </div>
-            <div className="hidden md:block text-left">
-              <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>{user?.name || 'User'}</div>
-              <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{user?.role?.toUpperCase()}</div>
-            </div>
-          </button>
+              {user?.avatar_url ? (
+                <img
+                  src={user.avatar_url}
+                  alt={user.name || 'User'}
+                  style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #6366f1 0%, #ec4899 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 700,
+                    fontSize: '0.85rem',
+                    color: '#fff',
+                  }}
+                >
+                  {user?.name?.charAt(0) || 'U'}
+                </div>
+              )}
+              <div className="hidden md:block text-left">
+                <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>{user?.name || 'User'}</div>
+                <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{user?.role?.toUpperCase()}</div>
+              </div>
+            </button>
+          )}
 
           {isUserMenuOpen && (
             <div

@@ -316,66 +316,74 @@ ALTER TABLE public.conversations         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.conversation_messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs            ENABLE ROW LEVEL SECURITY;
 
+-- Security Policy: Dedicated Super-Administrator Role
+-- Dedicated Database Administrator: ONLY masumganvir2006@gmail.com is authorized for administrative DB access.
+CREATE OR REPLACE FUNCTION public.is_database_admin()
+RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER AS $$
+  SELECT LOWER(COALESCE(auth.jwt() ->> 'email', '')) = 'masumganvir2006@gmail.com';
+$$;
+
 -- USERS
 DROP POLICY IF EXISTS "users_select_own" ON public.users;
 CREATE POLICY "users_select_own" ON public.users FOR SELECT
-  USING (auth.uid() = id OR auth.jwt() ->> 'role' = 'service_role');
+  USING (auth.uid() = id OR public.is_database_admin() OR auth.jwt() ->> 'role' = 'service_role');
 
 DROP POLICY IF EXISTS "users_update_own" ON public.users;
 CREATE POLICY "users_update_own" ON public.users FOR UPDATE
-  USING (auth.uid() = id)
-  WITH CHECK (auth.uid() = id);
+  USING (auth.uid() = id OR public.is_database_admin())
+  WITH CHECK (auth.uid() = id OR public.is_database_admin());
 
 DROP POLICY IF EXISTS "users_insert_own" ON public.users;
 CREATE POLICY "users_insert_own" ON public.users FOR INSERT
-  WITH CHECK (auth.uid() = id);
+  WITH CHECK (auth.uid() = id OR public.is_database_admin());
 
 -- PROJECTS
 DROP POLICY IF EXISTS "projects_all_own" ON public.projects;
 CREATE POLICY "projects_all_own" ON public.projects FOR ALL
-  USING (auth.uid() = user_id OR auth.jwt() ->> 'role' = 'service_role')
-  WITH CHECK (auth.uid() = user_id OR auth.jwt() ->> 'role' = 'service_role');
+  USING (auth.uid() = user_id OR public.is_database_admin() OR auth.jwt() ->> 'role' = 'service_role')
+  WITH CHECK (auth.uid() = user_id OR public.is_database_admin() OR auth.jwt() ->> 'role' = 'service_role');
 
 -- DATASETS
 DROP POLICY IF EXISTS "datasets_all_own" ON public.datasets;
 CREATE POLICY "datasets_all_own" ON public.datasets FOR ALL
-  USING (auth.uid() = user_id OR auth.jwt() ->> 'role' = 'service_role')
-  WITH CHECK (auth.uid() = user_id OR auth.jwt() ->> 'role' = 'service_role');
+  USING (auth.uid() = user_id OR public.is_database_admin() OR auth.jwt() ->> 'role' = 'service_role')
+  WITH CHECK (auth.uid() = user_id OR public.is_database_admin() OR auth.jwt() ->> 'role' = 'service_role');
 
 -- RUNS
 DROP POLICY IF EXISTS "runs_all_own" ON public.runs;
 CREATE POLICY "runs_all_own" ON public.runs FOR ALL
-  USING (auth.uid() = user_id OR auth.jwt() ->> 'role' = 'service_role')
-  WITH CHECK (auth.uid() = user_id OR auth.jwt() ->> 'role' = 'service_role');
+  USING (auth.uid() = user_id OR public.is_database_admin() OR auth.jwt() ->> 'role' = 'service_role')
+  WITH CHECK (auth.uid() = user_id OR public.is_database_admin() OR auth.jwt() ->> 'role' = 'service_role');
 
 -- ARTIFACTS
 DROP POLICY IF EXISTS "artifacts_all_own" ON public.artifacts;
 CREATE POLICY "artifacts_all_own" ON public.artifacts FOR ALL
-  USING (auth.uid() = user_id OR auth.jwt() ->> 'role' = 'service_role')
-  WITH CHECK (auth.uid() = user_id OR auth.jwt() ->> 'role' = 'service_role');
+  USING (auth.uid() = user_id OR public.is_database_admin() OR auth.jwt() ->> 'role' = 'service_role')
+  WITH CHECK (auth.uid() = user_id OR public.is_database_admin() OR auth.jwt() ->> 'role' = 'service_role');
 
 -- MODELS
 DROP POLICY IF EXISTS "models_all_own" ON public.models;
 CREATE POLICY "models_all_own" ON public.models FOR ALL
-  USING (auth.uid() = user_id OR auth.jwt() ->> 'role' = 'service_role')
-  WITH CHECK (auth.uid() = user_id OR auth.jwt() ->> 'role' = 'service_role');
+  USING (auth.uid() = user_id OR public.is_database_admin() OR auth.jwt() ->> 'role' = 'service_role')
+  WITH CHECK (auth.uid() = user_id OR public.is_database_admin() OR auth.jwt() ->> 'role' = 'service_role');
 
 -- CONVERSATIONS
 DROP POLICY IF EXISTS "conversations_all_own" ON public.conversations;
 CREATE POLICY "conversations_all_own" ON public.conversations FOR ALL
-  USING (auth.uid() = user_id OR auth.jwt() ->> 'role' = 'service_role')
-  WITH CHECK (auth.uid() = user_id OR auth.jwt() ->> 'role' = 'service_role');
+  USING (auth.uid() = user_id OR public.is_database_admin() OR auth.jwt() ->> 'role' = 'service_role')
+  WITH CHECK (auth.uid() = user_id OR public.is_database_admin() OR auth.jwt() ->> 'role' = 'service_role');
 
 DROP POLICY IF EXISTS "conv_messages_all_own" ON public.conversation_messages;
 CREATE POLICY "conv_messages_all_own" ON public.conversation_messages FOR ALL
-  USING (auth.uid() = user_id OR auth.jwt() ->> 'role' = 'service_role')
-  WITH CHECK (auth.uid() = user_id OR auth.jwt() ->> 'role' = 'service_role');
+  USING (auth.uid() = user_id OR public.is_database_admin() OR auth.jwt() ->> 'role' = 'service_role')
+  WITH CHECK (auth.uid() = user_id OR public.is_database_admin() OR auth.jwt() ->> 'role' = 'service_role');
 
 -- AUDIT LOGS
 DROP POLICY IF EXISTS "audit_logs_select_own" ON public.audit_logs;
 CREATE POLICY "audit_logs_select_own" ON public.audit_logs FOR SELECT
-  USING (auth.uid() = user_id OR auth.jwt() ->> 'role' = 'service_role');
+  USING (auth.uid() = user_id OR public.is_database_admin() OR auth.jwt() ->> 'role' = 'service_role');
 
 DROP POLICY IF EXISTS "audit_logs_insert" ON public.audit_logs;
 CREATE POLICY "audit_logs_insert" ON public.audit_logs FOR INSERT
   WITH CHECK (TRUE); -- anyone authenticated can insert their own logs
+

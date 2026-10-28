@@ -21,7 +21,7 @@ export function AppShell() {
 
   // Synchronize current project with active route
   useEffect(() => {
-    const match = location.pathname.match(/\/projects\/([^\/]+)/)
+    const match = location.pathname.match(/\/projects\/([^/]+)/)
     if (match && match[1] && match[1] !== 'new') {
       const routeProjId = match[1]
       if (currentProject?.id !== routeProjId) {

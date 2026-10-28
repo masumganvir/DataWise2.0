@@ -17,6 +17,17 @@ class ModelRegistry:
     def _register_default_models(self) -> None:
         self.register(
             ModelDescriptor(
+                model_name="gemini-3.8-flash",
+                provider=ProviderType.GEMINI,
+                context_window=1048576,
+                supports_system_prompt=True,
+                supports_json_schema=True,
+                is_local=False,
+                description="Google latest generation high performance flash model.",
+            )
+        )
+        self.register(
+            ModelDescriptor(
                 model_name="gemini-2.0-flash",
                 provider=ProviderType.GEMINI,
                 context_window=1048576,

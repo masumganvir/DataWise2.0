@@ -46,6 +46,7 @@ class SecurityService:
         resource_id: str,
         ip_address: Optional[str] = None,
         details: Optional[Dict[str, Any]] = None,
+        user_agent: Optional[str] = None,
     ) -> AuditLog:
         """Persists audit record in database."""
         safe_details = cls.mask_sensitive_dict(details or {})
@@ -57,6 +58,7 @@ class SecurityService:
             resource_type=resource_type,
             resource_id=resource_id,
             ip_hash=ip_hash,
+            user_agent=user_agent[:255] if user_agent else None,
             audit_metadata=safe_details,
         )
         db.add(audit)
@@ -64,5 +66,23 @@ class SecurityService:
         logger.info(f"[Audit] User {user_id} performed '{action}' on {resource_type}:{resource_id}")
         return audit
 
+    @staticmethod
+    def encrypt(data_str: str) -> str:
+        """Cryptographically encrypt confidential string before storing in database."""
+        from app.auth.security import encrypt_data
+        return encrypt_data(data_str)
+
+    @staticmethod
+    def decrypt(cipher_str: str) -> str:
+        """Decrypt encrypted string retrieved from database."""
+        from app.auth.security import decrypt_data
+        return decrypt_data(cipher_str)
+
+    @staticmethod
+    def hash_value(value: str) -> str:
+        """One-way cryptographic SHA-256 hash."""
+        return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
 
 security_service = SecurityService()
+

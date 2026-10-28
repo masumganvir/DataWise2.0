@@ -34,6 +34,7 @@ import {
 } from 'lucide-react'
 import { projectsApi } from '../../services/api'
 import { authStore } from '../../services/authStore'
+import { DocsDrawer } from '../../components/docs/DocsDrawer'
 
 /* ─── Interactive SVG Visualization Components ───────────────────────────────── */
 
@@ -226,6 +227,9 @@ export function ProjectSectionWorkspace() {
   const [loadingNotebook, setLoadingNotebook] = useState(false)
   const [edaData, setEdaData] = useState<any>(null)
   const [loadingEda, setLoadingEda] = useState(false)
+
+  // Documentation Drawer & Learning Hub state
+  const [isDocsDrawerOpen, setIsDocsDrawerOpen] = useState(false)
 
   // Contextual Assistant State
   const [assistantOpen, setAssistantOpen] = useState(false)
@@ -496,6 +500,27 @@ export function ProjectSectionWorkspace() {
             >
               <Bot size={15} />
               <span>{assistantOpen ? 'Hide AI Assistant' : 'Ask AI Assistant'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsDocsDrawerOpen(true)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 14px',
+                borderRadius: 'var(--radius-md)',
+                background: 'rgba(16, 185, 129, 0.1)',
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                color: '#34d399',
+                fontWeight: 600,
+                fontSize: '0.82rem',
+                cursor: 'pointer',
+              }}
+              title="Quick reference NumPy, Pandas, Matplotlib & Scikit-Learn documentation"
+            >
+              <BookOpen size={14} />
+              <span>Docs & Cheatsheets</span>
             </button>
             <Link
               to="/projects/new"
@@ -1898,11 +1923,9 @@ export function ProjectSectionWorkspace() {
                     from sklearn.linear_model import Ridge<br />
                   </div>
                   <div style={{ color: 'var(--primary-light)', margin: '14px 0 8px 0' }}># Cell 2: Load Ingested Dataset</div>
-                  <div style={{ color: 'var(--text-secondary)' }}>
-                    df = pd.read_csv("student_exam_performance.csv")<br />
+                    df = pd.read_csv("dataset.csv")<br />
                     print(f"Dataset shape: &#123;df.shape&#125;")<br />
-                    target = "exam_preparation_days"<br />
-                  </div>
+                    target = "target"<br />
                 </div>
               )}
             </div>
@@ -2426,6 +2449,9 @@ def predict_target(features: dict):
           </div>
         )}
       </div>
+
+      {/* Slide-out Documentation & Cheatsheet Drawer */}
+      <DocsDrawer isOpen={isDocsDrawerOpen} onClose={() => setIsDocsDrawerOpen(false)} />
     </div>
   )
 }

@@ -114,11 +114,23 @@ async def init_db() -> None:
                     ("projects", "latest_model_id", "VARCHAR(36)"),
                     ("projects", "latest_model_version", "VARCHAR(20)"),
                     ("projects", "project_metadata", "TEXT DEFAULT '{}'"),
+                    ("projects", "prompt_a", "TEXT"),
+                    ("projects", "prompt_b", "TEXT"),
+                    ("projects", "tuning_mode", "VARCHAR(50) DEFAULT 'hybrid'"),
+                    ("projects", "locked_parameters", "TEXT DEFAULT '{}'"),
+                    ("projects", "problem_specification", "TEXT"),
+                    ("projects", "experiment_plan", "TEXT"),
                     ("artifacts", "user_id", "VARCHAR(36)"),
                     ("artifacts", "run_id", "VARCHAR(36)"),
                     ("artifacts", "dataset_id", "VARCHAR(36)"),
                     ("artifacts", "version", "INTEGER DEFAULT 1"),
                     ("artifacts", "artifact_name", "VARCHAR(255)"),
+                    ("users", "avatar_url", "VARCHAR(500)"),
+                    ("users", "preferences", "TEXT DEFAULT '{}'"),
+                    ("project_prompts", "prompt_a", "TEXT"),
+                    ("project_prompts", "prompt_b", "TEXT"),
+                    ("project_prompts", "structured_interpretation", "TEXT"),
+                    ("project_prompts", "user_confirmed", "BOOLEAN DEFAULT 0"),
                 ]
                 for tbl, col, col_def in sqlite_migrations:
                     try:
@@ -128,6 +140,58 @@ async def init_db() -> None:
                             await conn.execute(text(f"ALTER TABLE {tbl} ADD COLUMN {col} {col_def};"))
                     except Exception as e:
                         logger.debug(f"SQLite migration check {tbl}.{col}: {e}")
+
+        # Seed essential default & demo accounts in the database
+        try:
+            from sqlalchemy import select
+            from app.db.models.entities import User
+            from app.auth.security import hash_password
+
+            async with AsyncSessionLocal() as seed_session:
+                # 1. usr_demo_workspace
+                stmt1 = select(User).where(User.id == "usr_demo_workspace")
+                if not (await seed_session.execute(stmt1)).scalar_one_or_none():
+                    seed_session.add(User(
+                        id="usr_demo_workspace",
+                        email="demo@datawise.ai",
+                        name="Data Science Engineer",
+                        password_hash=hash_password("DataWise_2025!"),
+                        role="data_scientist",
+                        status="active",
+                        is_active=True,
+                    ))
+
+                # 2. default_user
+                stmt2 = select(User).where(User.id == "default_user")
+                if not (await seed_session.execute(stmt2)).scalar_one_or_none():
+                    seed_session.add(User(
+                        id="default_user",
+                        email="default@datawise.ai",
+                        name="Default Scientist",
+                        password_hash=hash_password("DataWise_2025!"),
+                        role="data_scientist",
+                        status="active",
+                        is_active=True,
+                    ))
+
+                # 3. Dr. Elena Vance (demo.scientist@gmail.com)
+                stmt3 = select(User).where(User.email == "demo.scientist@gmail.com")
+                if not (await seed_session.execute(stmt3)).scalar_one_or_none():
+                    seed_session.add(User(
+                        id="usr_demo_scientist_vance",
+                        email="demo.scientist@gmail.com",
+                        name="Dr. Elena Vance",
+                        password_hash=hash_password("DataWise_2025!"),
+                        role="data_scientist",
+                        status="active",
+                        is_active=True,
+                    ))
+
+                await seed_session.commit()
+                logger.info("Default seed users verified in database.")
+        except Exception as seed_err:
+            logger.debug(f"User seed verification notice: {seed_err}")
+
         logger.info("Local DB tables created/verified via SQLAlchemy metadata.")
 
 

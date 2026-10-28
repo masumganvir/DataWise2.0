@@ -1,0 +1,49 @@
+graph TB
+    User(["👤 Enterprise User / Data Scientist"])
+
+    subgraph "Frontend Layer (Vite + React 18 + TS)"
+        UI["🖥️ Web Application Dashboard & Workbenches"]
+    end
+
+    subgraph "Identity & Access"
+        AuthService["🔐 Auth Provider (Clerk OAuth / Supabase / Local JWT)"]
+    end
+
+    subgraph "Backend API Gateway (FastAPI on Port 8000)"
+        API["⚡ FastAPI Server Engine"]
+        RateLimiter["🛡️ Distributed Sliding Window Rate Limiter"]
+        Middleware["📊 Telemetry, Request ID & Metrics Middleware"]
+    end
+
+    subgraph "Agentic Orchestration & AI Layer"
+        Coordinator["🤖 Multi-Agent Coordinator & Supervisor"]
+        LangGraphWorkflow["🔄 LangGraph Workflow Engine (17+ Stages)"]
+        LLMProvider["🧠 LLM Gateway (Gemini 3.8 / Groq LLaMA-3.3 / Cloudflare / Ollama)"]
+    end
+
+    subgraph "ML & Compute Execution Worker"
+        MLEngine["⚙️ Adaptive AutoML Engine & Sklearn/PyTorch Pipeline"]
+        OptunaOptimizer["🎯 Optuna Bayesian HPO & Parameter Validation"]
+        ModelRegistry["📦 Model Registry & Local Inference Engine"]
+    end
+
+    subgraph "Persistence & Caching Infrastructure"
+        DB[("🗄️ Relational DB: SQLite / PostgreSQL via SQLAlchemy 2.0")]
+        RedisCache[("⚡ Redis Cache & Lock Manager (with In-Memory Fallback)")]
+        Storage["📁 Storage Engine: Local Artifact Store / MinIO S3 / Supabase"]
+    end
+
+    User -->|"HTTPS / WebSocket"| UI
+    UI -->|"Authenticate"| AuthService
+    UI -->|"REST API / WS Calls"| RateLimiter
+    RateLimiter --> Middleware --> API
+    API --> Coordinator
+    Coordinator --> LangGraphWorkflow
+    Coordinator --> LLMProvider
+    LangGraphWorkflow --> MLEngine
+    MLEngine --> OptunaOptimizer
+    MLEngine --> ModelRegistry
+    API --> DB
+    API --> RedisCache
+    MLEngine --> Storage
+    API --> Storage

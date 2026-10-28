@@ -68,6 +68,12 @@ class BaseLLMProvider:
 class GeminiProvider(BaseLLMProvider):
     def __init__(self, api_key: str):
         self.api_key = api_key
+        self._client = None
+        try:
+            from google import genai
+            self._client = genai.Client(api_key=api_key)
+        except Exception as e:
+            logger.warning(f"Failed to initialize google.genai Client: {e}")
 
     async def complete(
         self,
@@ -77,28 +83,31 @@ class GeminiProvider(BaseLLMProvider):
         max_tokens: int = 2048,
         task: Literal["fast", "capable"] = "fast",
     ) -> str:
-        try:
-            import google.generativeai as genai  # type: ignore
+        if not self._client:
+            return ""
+        full_prompt = ""
+        if system_prompt:
+            full_prompt += f"{system_prompt}\n\n"
+        for m in messages:
+            full_prompt += f"{m.role.capitalize()}: {m.content}\n"
 
-            model_name = "gemini-1.5-pro" if task == "capable" else "gemini-1.5-flash"
-            genai.configure(api_key=self.api_key)
-            model = genai.GenerativeModel(
-                model_name=model_name,
-                system_instruction=system_prompt or "You are DataWise AI, an expert autonomous data scientist.",
-            )
-            history = [{"role": "user" if m.role == "user" else "model", "parts": [m.content]} for m in messages[:-1]]
-            chat = model.start_chat(history=history)
-            response = chat.send_message(
-                messages[-1].content,
-                generation_config=genai.GenerationConfig(
-                    temperature=temperature,
-                    max_output_tokens=max_tokens,
-                ),
-            )
-            return response.text
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(f"Gemini completion failed: {exc}")
-            return f"DataWise AI (Gemini fallback response for: {messages[-1].content[:60]}...)"
+        import asyncio
+        loop = asyncio.get_event_loop()
+        models_to_try = ["gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-3.8-flash"]
+        for model_name in models_to_try:
+            try:
+                res = await loop.run_in_executor(
+                    None,
+                    lambda m=model_name: self._client.models.generate_content(
+                        model=m,
+                        contents=full_prompt,
+                    )
+                )
+                if res and res.text:
+                    return res.text.strip()
+            except Exception as exc:
+                logger.debug(f"Gemini model {model_name} attempt failed: {exc}")
+        return ""
 
     async def stream(
         self,
@@ -108,31 +117,73 @@ class GeminiProvider(BaseLLMProvider):
         max_tokens: int = 2048,
         task: Literal["fast", "capable"] = "fast",
     ) -> AsyncIterator[str]:
-        try:
-            import google.generativeai as genai  # type: ignore
+        full = await self.complete(messages, system_prompt, temperature, max_tokens, task)
+        for word in full.split():
+            yield word + " "
 
-            model_name = "gemini-1.5-pro" if task == "capable" else "gemini-1.5-flash"
-            genai.configure(api_key=self.api_key)
-            model = genai.GenerativeModel(
-                model_name=model_name,
-                system_instruction=system_prompt or "You are DataWise AI, an expert autonomous data scientist.",
-            )
-            history = [{"role": "user" if m.role == "user" else "model", "parts": [m.content]} for m in messages[:-1]]
-            chat = model.start_chat(history=history)
-            response = chat.send_message(
-                messages[-1].content,
-                stream=True,
-                generation_config=genai.GenerationConfig(
-                    temperature=temperature,
-                    max_output_tokens=max_tokens,
-                ),
-            )
-            for chunk in response:
-                if chunk.text:
-                    yield chunk.text
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(f"Gemini stream failed: {exc}")
-            yield f"DataWise AI (Gemini stream fallback for: {messages[-1].content[:60]}...)"
+
+# ------------------------------------------------------------------ #
+#  Groq Provider
+# ------------------------------------------------------------------ #
+
+class GroqProvider(BaseLLMProvider):
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.models_to_try = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"]
+
+    async def complete(
+        self,
+        messages: List[LLMMessage],
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.3,
+        max_tokens: int = 2048,
+        task: Literal["fast", "capable"] = "fast",
+    ) -> str:
+        msg_list = []
+        if system_prompt:
+            msg_list.append({"role": "system", "content": system_prompt})
+        msg_list.extend([m.to_dict() for m in messages])
+
+        try:
+            async with httpx.AsyncClient(timeout=25.0) as client:
+                for model in self.models_to_try:
+                    try:
+                        res = await client.post(
+                            "https://api.groq.com/openai/v1/chat/completions",
+                            headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+                            json={
+                                "model": model,
+                                "messages": msg_list,
+                                "temperature": temperature,
+                                "max_tokens": max_tokens,
+                            },
+                        )
+                        if res.status_code == 200:
+                            data = res.json()
+                            choices = data.get("choices", [])
+                            if choices:
+                                text = choices[0].get("message", {}).get("content", "").strip()
+                                if text:
+                                    return text
+                        logger.debug(f"Groq model {model} returned status {res.status_code}")
+                    except Exception as exc:
+                        logger.debug(f"Groq model {model} failed: {exc}")
+        except Exception as exc:
+            logger.warning(f"Groq completion client error: {exc}")
+        return ""
+
+    async def stream(
+        self,
+        messages: List[LLMMessage],
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.3,
+        max_tokens: int = 2048,
+        task: Literal["fast", "capable"] = "fast",
+    ) -> AsyncIterator[str]:
+        full = await self.complete(messages, system_prompt, temperature, max_tokens, task)
+        for word in full.split():
+            yield word + " "
+
 
 
 # ------------------------------------------------------------------ #
@@ -305,26 +356,28 @@ class MockProvider(BaseLLMProvider):
 
 class LLMProvider:
     """
-    Unified LLM router managing Gemini, OpenAI, Anthropic, and Mock providers.
-    Routes queries to fast or capable models based on task complexity.
+    Unified LLM router managing Groq, Gemini, OpenAI, Anthropic, and Mock providers.
+    Routes queries with seamless cascading fallback if a provider spikes or fails.
     """
 
     def __init__(self) -> None:
+        self.groq_key = os.getenv("GROQ_API_KEY", "")
         self.gemini_key = os.getenv("GEMINI_API_KEY", "")
         self.openai_key = os.getenv("OPENAI_API_KEY", "")
         self.anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
 
-        self._active_provider = self._select_provider()
-        logger.info(f"LLMProvider initialized with active backend: {self._active_provider.__class__.__name__}")
-
-    def _select_provider(self) -> BaseLLMProvider:
+        self.providers: List[BaseLLMProvider] = []
+        if self.groq_key:
+            self.providers.append(GroqProvider(self.groq_key))
         if self.gemini_key:
-            return GeminiProvider(self.gemini_key)
+            self.providers.append(GeminiProvider(self.gemini_key))
         if self.openai_key:
-            return OpenAIProvider(self.openai_key)
+            self.providers.append(OpenAIProvider(self.openai_key))
         if self.anthropic_key:
-            return AnthropicProvider(self.anthropic_key)
-        return MockProvider()
+            self.providers.append(AnthropicProvider(self.anthropic_key))
+        self.providers.append(MockProvider())
+
+        logger.info(f"LLMProvider initialized with {len(self.providers)} providers: {[p.__class__.__name__ for p in self.providers]}")
 
     async def complete(
         self,
@@ -334,13 +387,22 @@ class LLMProvider:
         max_tokens: int = 2048,
         task: Literal["fast", "capable"] = "fast",
     ) -> str:
-        return await self._active_provider.complete(
-            messages=messages,
-            system_prompt=system_prompt,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            task=task,
-        )
+        for provider in self.providers:
+            try:
+                res = await provider.complete(
+                    messages=messages,
+                    system_prompt=system_prompt,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    task=task,
+                )
+                if res and not res.startswith("DataWise AI (") and not res.startswith("Error:"):
+                    return res
+            except Exception as exc:
+                logger.warning(f"Provider {provider.__class__.__name__} failed: {exc}")
+
+        # Fallback to the last provider (Mock)
+        return await self.providers[-1].complete(messages, system_prompt, temperature, max_tokens, task)
 
     async def stream(
         self,
@@ -350,15 +412,28 @@ class LLMProvider:
         max_tokens: int = 2048,
         task: Literal["fast", "capable"] = "fast",
     ) -> AsyncIterator[str]:
-        async for chunk in self._active_provider.stream(
-            messages=messages,
-            system_prompt=system_prompt,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            task=task,
-        ):
+        for provider in self.providers:
+            try:
+                has_yielded = False
+                async for chunk in provider.stream(
+                    messages=messages,
+                    system_prompt=system_prompt,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    task=task,
+                ):
+                    if chunk and not chunk.startswith("DataWise AI ("):
+                        has_yielded = True
+                        yield chunk
+                if has_yielded:
+                    return
+            except Exception as exc:
+                logger.warning(f"Provider {provider.__class__.__name__} stream failed: {exc}")
+
+        async for chunk in self.providers[-1].stream(messages, system_prompt, temperature, max_tokens, task):
             yield chunk
 
 
 # Singleton
 llm_provider = LLMProvider()
+

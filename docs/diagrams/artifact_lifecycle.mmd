@@ -1,0 +1,37 @@
+stateDiagram-v2
+    [*] --> Generation: ML Execution Completes
+    state Generation {
+        direction LR
+        ModelPickle: Serialize model_pipeline.pkl
+        NotebookJSON: Export notebook.ipynb (24 sections)
+        ReportHTML: Generate report.html / report.md
+        MetadataJSON: Record run_metadata.json
+    }
+
+    Generation --> Validation: In-Memory Integrity Check
+    state Validation {
+        Checksum: Compute SHA-256 Hash
+        SchemaCheck: Validate Metadata & Score Cards
+        PickleSafeCheck: Verify Serialization Integrity
+    }
+
+    Validation --> Storage: Persist to Storage Backend
+    state Storage {
+        NamespacedPath: projects/{proj_id}/artifacts/{run_id}/
+        MetadataDB: Insert record into `artifacts` table
+    }
+
+    Storage --> Access: Authorized Access & Serving
+    state Access {
+        TenantAuth: Verify User & Organization RBAC
+        StreamBinary: Stream chunked response via API
+        ZipPackaging: Optional consolidated bundle download
+    }
+
+    Access --> Retention: Lifecycle & Cleanup Policy
+    state Retention {
+        Archival: Compress old experiment runs
+        Purge: Soft/Hard delete upon Project removal
+    }
+
+    Retention --> [*]

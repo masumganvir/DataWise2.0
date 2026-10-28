@@ -54,6 +54,9 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
 }
 
 
+SUPER_ADMIN_EMAIL = "masumganvir2006@gmail.com"
+
+
 async def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Security(security_scheme),
     db: AsyncSession = Depends(get_db),
@@ -63,7 +66,15 @@ async def get_current_user(
         return None
 
     token = credentials.credentials
-    if token in ("demo-token", "test-token", "dev-token"):
+    if token in ("demo-token", "test-token", "dev-token", "demo-token-no-real-auth"):
+        from app.config.settings import get_settings
+        _current_settings = get_settings()
+        if _current_settings.is_production or _current_settings.app_env == "production":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Development demo tokens are strictly disabled in production environments.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
         return User(
             id="usr_demo_workspace",
             email="demo@datawise.ai",
@@ -108,6 +119,39 @@ async def get_current_user(
             is_active=True,
         )
 
+    # Security rule: Only masumganvir2006@gmail.com can possess administrative authority
+    if user and user.role in ("admin", "owner"):
+        if not user.email or user.email.strip().lower() != SUPER_ADMIN_EMAIL.lower():
+            user.role = "data_scientist"
+
+    return user
+
+
+async def require_authenticated_user(
+    user: Optional[User] = Depends(get_current_user),
+) -> User:
+    """Enforce strict authentication: raises HTTP 401 Unauthorized if no valid credentials provided."""
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required. Please provide a valid Bearer token.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user
+
+
+async def require_admin(
+    user: User = Depends(require_authenticated_user),
+) -> User:
+    """
+    Enforce super-admin database and platform administration access.
+    Strictly verifies that the requester is the authorized administrator: masumganvir2006@gmail.com.
+    """
+    if not user.email or user.email.strip().lower() != SUPER_ADMIN_EMAIL.lower():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access forbidden: Database administration and system management is strictly restricted to masumganvir2006@gmail.com.",
+        )
     return user
 
 
@@ -120,10 +164,18 @@ def require_permission(required_perm: str):
                 detail="Authentication required for this operation.",
             )
 
+        # Non-super-admins cannot exercise admin.manage
+        if required_perm == "admin.manage" and (not user.email or user.email.strip().lower() != SUPER_ADMIN_EMAIL.lower()):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: Administrative privileges reserved for masumganvir2006@gmail.com.",
+            )
+
         user_role = user.role or "viewer"
         granted_perms = ROLE_PERMISSIONS.get(user_role, set())
 
-        if required_perm not in granted_perms and "admin.manage" not in granted_perms:
+        is_super_admin = bool(user.email and user.email.strip().lower() == SUPER_ADMIN_EMAIL.lower())
+        if required_perm not in granted_perms and not (is_super_admin and "admin.manage" in granted_perms):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access denied. Missing required permission: '{required_perm}'.",
@@ -132,3 +184,4 @@ def require_permission(required_perm: str):
         return user
 
     return permission_checker
+

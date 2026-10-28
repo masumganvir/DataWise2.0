@@ -1,0 +1,26 @@
+graph TD
+    Start([User Initiates Session]) --> Intake[IntakeAgent / Ingestion]
+    Intake --> Profile[ProfilingAgent: Schema, Types, Stats]
+    Profile --> Quality[QualityAgent: Missingness, Duplicates]
+    Quality --> HumanApproval{HumanApprovalNode: Destructive Actions?}
+    
+    HumanApproval -->|Action Requires Approval| PauseWait[Workflow Pauses: Awaiting User Decision]
+    PauseWait -->|User Confirms / Modifies| ResumeWorkflow[Resume Execution]
+    ResumeWorkflow --> Outliers
+    HumanApproval -->|Safe Default| Outliers[OutlierAgent: Z-Score, IQR, Isolation Forest]
+
+    Outliers --> Distributions[Distributions: Normality, Skewness, Transformations]
+    Distributions --> Correlations[Correlations: Pearson, Spearman, Multicollinearity]
+    Correlations --> FeatureEng[FeatureEngineeringAgent: Polynomial, Datetime, Log, Bins]
+    FeatureEng --> FeatureSelect[FeatureSelectionAgent: Mutual Info, RFE, Variance]
+    FeatureSelect --> TargetDetect[TargetDetector: Heuristic & Variance Scored Target Detection]
+    TargetDetect --> LeakageCheck[LeakageDetector: Correlation to Target, Constant ID, Direct Leakage]
+    LeakageCheck --> PipelineBuild[PipelineBuilderAgent: Sklearn ColumnTransformer & Imputer Plan]
+    PipelineBuild --> MLRecommend[MLRecommendationAgent: Model Selection Rationale]
+    MLRecommend --> Training[TrainingAgent: Candidate Model Training & CV Folds]
+    Training --> Evaluation[EvaluationAgent: ROC-AUC, F1, PR-AUC, Overfitting Audit]
+    Evaluation --> Explainability[ExplainabilityAgent: SHAP Values, Feature Importance]
+    Explainability --> NotebookGen[NotebookAgent: Standalone 24-Section Jupyter Notebook]
+    NotebookGen --> ArtifactExport[ArtifactManagerAgent: Pipeline.pkl, Metadata, Reports, ZIP]
+    ArtifactExport --> LLMInterpreter[LLMInterpreterNode: Natural Language Summary & Next Steps]
+    LLMInterpreter --> EndState([Autonomous Analysis Complete])

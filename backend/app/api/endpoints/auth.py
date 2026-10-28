@@ -17,12 +17,17 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
 
+import hashlib
+import uuid
+from datetime import datetime, timedelta
+
 from app.auth.rbac import get_current_user
 from app.auth.security import create_access_token
-from app.db.models.entities import User
+from app.db.models.entities import User, UserSession
 from app.models.database import get_db
 from database.repositories.users import UserRepository
 from services.security_service import security_service
@@ -33,18 +38,19 @@ FRONTEND_URL = os.getenv("VITE_API_BASE_URL", "http://localhost:5173").replace("
 
 
 def _require_gmail(email: str) -> str:
-    """Validate and normalize email; raise HTTP 403 if domain is not @gmail.com."""
+    """Validate and normalize email."""
     normalized = email.strip().lower()
-    if not normalized.endswith("@gmail.com"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access restricted: only @gmail.com email addresses are permitted.",
-        )
+    if os.getenv("STRICT_GMAIL", "true").lower() == "true":
+        if not normalized.endswith("@gmail.com"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access restricted: only @gmail.com email addresses are permitted.",
+            )
     parts = normalized.split("@")
-    if len(parts) != 2 or parts[1] != "gmail.com" or not parts[0]:
+    if len(parts) != 2 or not parts[0] or not parts[1] or "." not in parts[1]:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access restricted: only @gmail.com email addresses are permitted.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid email address format.",
         )
     return normalized
 
@@ -54,6 +60,7 @@ class RegisterRequest(BaseModel):
     password: str = Field(..., min_length=8, description="Minimum 8 characters")
     name: Optional[str] = "Data Scientist"
     role: Optional[str] = "data_scientist"
+    framework: Optional[str] = "pytorch"
 
 
 class LoginRequest(BaseModel):
@@ -82,7 +89,7 @@ async def register(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    """Creates a new user account with Argon2id hashing and issues access token.
+    """Creates a new user account with Argon2id hashing, creates session, logs audit trail, and issues access token.
     Only @gmail.com email addresses are accepted.
     """
     clean_email = _require_gmail(payload.email)
@@ -114,15 +121,43 @@ async def register(
 
     token = create_access_token(data={"sub": user.id, "email": user.email, "role": user.role})
 
+    # Record UserSession in DB
+    try:
+        token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        session_record = UserSession(
+            id=f"ses_{uuid.uuid4().hex[:12]}",
+            user_id=user.id,
+            token_hash=token_hash,
+            expires_at=datetime.utcnow() + timedelta(minutes=60),
+        )
+        db.add(session_record)
+        await db.commit()
+    except Exception as sess_err:
+        logger.warning(f"[Auth] Session record warning: {sess_err}")
+
+    # Record AuditLog in DB
     client_ip = request.client.host if request.client else "unknown"
-    await security_service.record_audit_event(
-        db=db,
-        user_id=user.id,
-        action="user_registered",
-        resource_type="user",
-        resource_id=user.id,
-        ip_address=client_ip,
-    )
+    user_agent = request.headers.get("User-Agent", "unknown")
+    try:
+        await security_service.record_audit_event(
+            db=db,
+            user_id=user.id,
+            action="user_registered",
+            resource_type="user",
+            resource_id=user.id,
+            ip_address=client_ip,
+            user_agent=user_agent,
+            details={
+                "email": user.email,
+                "name": user.name,
+                "role": user.role,
+                "framework": payload.framework or "pytorch",
+                "auth_method": "password_argon2id",
+                "timestamp": datetime.utcnow().isoformat(),
+            },
+        )
+    except Exception as audit_err:
+        logger.warning(f"[Auth] Audit log warning: {audit_err}")
 
     return {
         "access_token": token,
@@ -143,7 +178,7 @@ async def login(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    """Authenticates credentials against Argon2id hash and issues JWT token.
+    """Authenticates credentials against Argon2id hash, records session, logs audit trail, and issues JWT token.
     Only @gmail.com email addresses are accepted.
     """
     clean_email = _require_gmail(payload.email)
@@ -157,25 +192,67 @@ async def login(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    if not user or not user.is_active:
-        raise generic_error
+    client_ip = request.client.host if request.client else "unknown"
+    user_agent = request.headers.get("User-Agent", "unknown")
 
-    if not UserRepository.verify_password(payload.password, user.password_hash):
+    if not user or not user.is_active or not UserRepository.verify_password(payload.password, user.password_hash):
+        try:
+            await security_service.record_audit_event(
+                db=db,
+                user_id=user.id if user else "unauthenticated",
+                action="login_failed",
+                resource_type="user",
+                resource_id=user.id if user else clean_email,
+                ip_address=client_ip,
+                details={
+                    "email": clean_email,
+                    "user_agent": user_agent,
+                    "reason": "invalid_credentials",
+                    "timestamp": datetime.utcnow().isoformat(),
+                },
+            )
+        except Exception as log_err:
+            logger.warning(f"[Auth] Failed to record failed login audit: {log_err}")
         raise generic_error
 
     await UserRepository.update_last_login(db, user.id)
 
     token = create_access_token(data={"sub": user.id, "email": user.email, "role": user.role})
 
-    client_ip = request.client.host if request.client else "unknown"
-    await security_service.record_audit_event(
-        db=db,
-        user_id=user.id,
-        action="login_successful",
-        resource_type="user",
-        resource_id=user.id,
-        ip_address=client_ip,
-    )
+    # Record UserSession in DB
+    try:
+        token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        session_record = UserSession(
+            id=f"ses_{uuid.uuid4().hex[:12]}",
+            user_id=user.id,
+            token_hash=token_hash,
+            expires_at=datetime.utcnow() + timedelta(minutes=60),
+        )
+        db.add(session_record)
+        await db.commit()
+    except Exception as sess_err:
+        logger.warning(f"[Auth] Session record warning: {sess_err}")
+
+    # Record AuditLog in DB
+    try:
+        await security_service.record_audit_event(
+            db=db,
+            user_id=user.id,
+            action="login_successful",
+            resource_type="user",
+            resource_id=user.id,
+            ip_address=client_ip,
+            user_agent=user_agent,
+            details={
+                "email": user.email,
+                "name": user.name,
+                "role": user.role,
+                "auth_method": "password_argon2id",
+                "timestamp": datetime.utcnow().isoformat(),
+            },
+        )
+    except Exception as audit_err:
+        logger.warning(f"[Auth] Audit log warning: {audit_err}")
 
     return {
         "access_token": token,
@@ -190,23 +267,188 @@ async def login(
     }
 
 
-# ─── Google OAuth ─────────────────────────────────────────────────────────────
+# ─── Google & GitHub OAuth Providers ──────────────────────────────────────────
 
-GOOGLE_CLIENT_ID     = os.getenv("GOOGLE_CLIENT_ID", "")
-GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
-GITHUB_CLIENT_ID     = os.getenv("GITHUB_CLIENT_ID", "")
-GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET", "")
+def _get_fresh_env_value(key: str, default: str = "") -> str:
+    """Read fresh value from root or backend .env without caching."""
+    from pathlib import Path
+    from dotenv import dotenv_values
+
+    # Check root .env first, then backend .env, then current directory
+    search_paths = [
+        Path(__file__).resolve().parents[4] / ".env",
+        Path(__file__).resolve().parents[3] / ".env",
+        Path.cwd() / ".env",
+    ]
+    for p in search_paths:
+        if p.exists():
+            try:
+                vals = dotenv_values(p)
+                if key in vals and vals[key]:
+                    return str(vals[key]).strip()
+            except Exception:
+                pass
+    val = os.getenv(key)
+    return val.strip() if val else default
+
+def _get_google_client_id() -> str:
+    return _get_fresh_env_value("GOOGLE_CLIENT_ID", "")
+
+def _get_google_client_secret() -> str:
+    return _get_fresh_env_value("GOOGLE_CLIENT_SECRET", "")
+
+def _get_github_client_id() -> str:
+    return _get_fresh_env_value("GITHUB_CLIENT_ID", "")
+
+def _get_github_client_secret() -> str:
+    return _get_fresh_env_value("GITHUB_CLIENT_SECRET", "")
+
+def _get_oauth_redirect_base(request: Request) -> str:
+    configured = _get_fresh_env_value("OAUTH_REDIRECT_BASE_URL", "")
+    if configured:
+        return configured.rstrip('/')
+    return str(request.base_url).rstrip('/')
+
+
+class ClerkSyncRequest(BaseModel):
+    id: str
+    email: str
+    name: Optional[str] = "Data Scientist"
+    avatar_url: Optional[str] = None
+
+
+@router.get("/oauth/providers", summary="Check OAuth provider readiness without exposing secrets", include_in_schema=True)
+async def get_oauth_providers():
+    """Safe endpoint returning provider readiness flags. Never exposes client secrets or API keys."""
+    clerk_key = _get_fresh_env_value("VITE_CLERK_PUBLISHABLE_KEY", "") or _get_fresh_env_value("CLERK_PUBLISHABLE_KEY", "")
+    return {
+        "clerk": {
+            "configured": bool(clerk_key and len(clerk_key) > 10),
+            "publishable_key": clerk_key,
+        },
+        "google": {
+            "configured": False,
+            "masked_id": None,
+        },
+        "github": {
+            "configured": False,
+            "masked_id": None,
+        },
+    }
+
+
+@router.post("/clerk/sync", summary="Synchronize Clerk authenticated user with database and generate audit logs")
+async def clerk_sync(
+    payload: ClerkSyncRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Called when a user signs in via Clerk Auth.
+    1. Records or updates user record in the database.
+    2. Records an encrypted/masked audit log event.
+    3. Persists an active UserSession in the database.
+    4. Issues a signed access token.
+    """
+    user_id = payload.id.strip()
+    clean_email = (payload.email or f"{user_id}@clerk.user").strip().lower()
+    display_name = payload.name or clean_email.split("@")[0] or "Data Scientist"
+
+    stmt = select(User).where((User.id == user_id) | (User.email == clean_email))
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+
+    if not user:
+        user = User(
+            id=user_id,
+            email=clean_email,
+            name=display_name,
+            password_hash="clerk_authenticated",
+            role="data_scientist",
+            status="active",
+            is_active=True,
+            avatar_url=payload.avatar_url,
+            last_login_at=datetime.utcnow(),
+        )
+        db.add(user)
+    else:
+        user.name = display_name or user.name
+        if payload.avatar_url:
+            user.avatar_url = payload.avatar_url
+        user.last_login_at = datetime.utcnow()
+        user.is_active = True
+
+    await db.commit()
+    await db.refresh(user)
+
+    client_ip = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent", "")
+    await security_service.record_audit_event(
+        db=db,
+        user_id=user.id,
+        action="login",
+        resource_type="clerk_auth",
+        resource_id=user.id,
+        ip_address=client_ip,
+        user_agent=user_agent,
+        details={
+            "provider": "clerk",
+            "email": clean_email,
+            "auth_method": "clerk_sso",
+            "avatar_url": payload.avatar_url,
+        },
+    )
+
+    access_token = create_access_token(
+        data={
+            "sub": user.id,
+            "email": user.email,
+            "name": user.name,
+            "role": user.role,
+        }
+    )
+
+    # Persist session in user_sessions table
+    try:
+        token_hash = hashlib.sha256(access_token.encode("utf-8")).hexdigest()
+        session_record = UserSession(
+            id=f"ses_{uuid.uuid4().hex[:12]}",
+            user_id=user.id,
+            token_hash=token_hash,
+            expires_at=datetime.utcnow() + timedelta(minutes=60),
+        )
+        db.add(session_record)
+        await db.commit()
+    except Exception as sess_err:
+        logger.warning(f"[ClerkAuth] Session record notice: {sess_err}")
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "name": user.name,
+            "role": user.role,
+            "avatar_url": getattr(user, "avatar_url", None) or payload.avatar_url,
+            "created_at": user.created_at.isoformat() if hasattr(user, "created_at") and user.created_at else datetime.utcnow().isoformat(),
+            "is_active": user.is_active,
+        },
+    }
+
 
 
 @router.get("/google", summary="Initiate Google OAuth flow", include_in_schema=True)
 async def google_oauth_start(request: Request):
     """Redirect user to Google's OAuth consent screen."""
-    if not GOOGLE_CLIENT_ID:
-        raise HTTPException(status_code=501, detail="Google OAuth is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env")
+    client_id = _get_google_client_id()
+    if not client_id:
+        return RedirectResponse(f"{FRONTEND_URL}/login?error=google_not_configured")
     import urllib.parse
+    base_url = _get_oauth_redirect_base(request)
     params = urllib.parse.urlencode({
-        "client_id": GOOGLE_CLIENT_ID,
-        "redirect_uri": str(request.base_url).rstrip('/') + "/api/auth/google/callback",
+        "client_id": client_id,
+        "redirect_uri": f"{base_url}/api/auth/google/callback",
         "response_type": "code",
         "scope": "openid email profile",
         "access_type": "offline",
@@ -220,16 +462,23 @@ async def google_oauth_callback(
     request: Request,
     code: Optional[str] = None,
     error: Optional[str] = None,
+    error_description: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
     """Exchange auth code for tokens, enforce @gmail.com, issue local JWT."""
     if error or not code:
+        err_str = f"{error or ''} {error_description or ''}".lower()
+        if "deleted_client" in err_str:
+            return RedirectResponse(f"{FRONTEND_URL}/login?error=google_deleted_client")
         return RedirectResponse(f"{FRONTEND_URL}/login?error=google_cancelled")
-    if not GOOGLE_CLIENT_ID:
+    client_id = _get_google_client_id()
+    client_secret = _get_google_client_secret()
+    if not client_id:
         return RedirectResponse(f"{FRONTEND_URL}/login?error=oauth_not_configured")
 
     import httpx
-    redirect_uri = str(request.base_url).rstrip('/') + "/api/auth/google/callback"
+    base_url = _get_oauth_redirect_base(request)
+    redirect_uri = f"{base_url}/api/auth/google/callback"
 
     # Exchange code for tokens
     async with httpx.AsyncClient() as client:
@@ -237,8 +486,8 @@ async def google_oauth_callback(
             "https://oauth2.googleapis.com/token",
             data={
                 "code": code,
-                "client_id": GOOGLE_CLIENT_ID,
-                "client_secret": GOOGLE_CLIENT_SECRET,
+                "client_id": client_id,
+                "client_secret": client_secret,
                 "redirect_uri": redirect_uri,
                 "grant_type": "authorization_code",
             },
@@ -278,6 +527,44 @@ async def google_oauth_callback(
         await UserRepository.update_last_login(db, user.id)
 
     token = create_access_token(data={"sub": user.id, "email": user.email, "role": user.role})
+
+    # Record UserSession & AuditLog in DB
+    try:
+        token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        session_record = UserSession(
+            id=f"ses_{uuid.uuid4().hex[:12]}",
+            user_id=user.id,
+            token_hash=token_hash,
+            expires_at=datetime.utcnow() + timedelta(minutes=60),
+        )
+        db.add(session_record)
+        await db.commit()
+    except Exception as sess_err:
+        logger.warning(f"[Auth] Google OAuth session record warning: {sess_err}")
+
+    client_ip = request.client.host if request.client else "unknown"
+    user_agent = request.headers.get("User-Agent", "unknown")
+    try:
+        await security_service.record_audit_event(
+            db=db,
+            user_id=user.id,
+            action="oauth_login_google",
+            resource_type="user",
+            resource_id=user.id,
+            ip_address=client_ip,
+            user_agent=user_agent,
+            details={
+                "email": user.email,
+                "name": user.name,
+                "role": user.role,
+                "provider": "google",
+                "timestamp": datetime.utcnow().isoformat(),
+            },
+        )
+    except Exception as audit_err:
+        logger.warning(f"[Auth] Google OAuth audit log warning: {audit_err}")
+
+    import urllib.parse
     return RedirectResponse(
         f"{FRONTEND_URL}/auth/callback?token={token}&name={urllib.parse.quote(user.name)}&email={urllib.parse.quote(user.email)}"
     )
@@ -288,12 +575,14 @@ async def google_oauth_callback(
 @router.get("/github", summary="Initiate GitHub OAuth flow", include_in_schema=True)
 async def github_oauth_start(request: Request):
     """Redirect user to GitHub's OAuth consent screen."""
-    if not GITHUB_CLIENT_ID:
+    client_id = _get_github_client_id()
+    if not client_id:
         raise HTTPException(status_code=501, detail="GitHub OAuth is not configured. Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET in .env")
     import urllib.parse
+    base_url = _get_oauth_redirect_base(request)
     params = urllib.parse.urlencode({
-        "client_id": GITHUB_CLIENT_ID,
-        "redirect_uri": str(request.base_url).rstrip('/') + "/api/auth/github/callback",
+        "client_id": client_id,
+        "redirect_uri": f"{base_url}/api/auth/github/callback",
         "scope": "user:email",
     })
     return RedirectResponse(f"https://github.com/login/oauth/authorize?{params}")
@@ -309,18 +598,24 @@ async def github_oauth_callback(
     """Exchange auth code for tokens, enforce @gmail.com, issue local JWT."""
     if error or not code:
         return RedirectResponse(f"{FRONTEND_URL}/login?error=github_cancelled")
-    if not GITHUB_CLIENT_ID:
+    client_id = _get_github_client_id()
+    client_secret = _get_github_client_secret()
+    if not client_id:
         return RedirectResponse(f"{FRONTEND_URL}/login?error=oauth_not_configured")
 
     import httpx, urllib.parse
+    base_url = _get_oauth_redirect_base(request)
+    redirect_uri = f"{base_url}/api/auth/github/callback"
+
     # Exchange code for access token
     async with httpx.AsyncClient() as client:
         token_resp = await client.post(
             "https://github.com/login/oauth/access_token",
             data={
-                "client_id": GITHUB_CLIENT_ID,
-                "client_secret": GITHUB_CLIENT_SECRET,
+                "client_id": client_id,
+                "client_secret": client_secret,
                 "code": code,
+                "redirect_uri": redirect_uri,
             },
             headers={"Accept": "application/json"},
         )
@@ -373,6 +668,35 @@ async def github_oauth_callback(
         await UserRepository.update_last_login(db, user.id)
 
     token = create_access_token(data={"sub": user.id, "email": user.email, "role": user.role})
+
+    # Record UserSession and AuditLog in database
+    try:
+        session_obj = UserSession(
+            id=f"ses_{uuid.uuid4().hex[:12]}",
+            user_id=user.id,
+            token_hash=hashlib.sha256(token.encode("utf-8")).hexdigest(),
+            expires_at=datetime.utcnow() + timedelta(days=7),
+            created_at=datetime.utcnow(),
+        )
+        db.add(session_obj)
+        await db.commit()
+    except Exception as exc:
+        logger.warning(f"Failed to record GitHub OAuth user session: {exc}")
+
+    try:
+        await security_service.record_audit_event(
+            db=db,
+            user_id=user.id,
+            action="oauth_login_github",
+            resource_type="user",
+            resource_id=user.id,
+            ip_address=request.client.host if request.client else None,
+            details={"email": user.email, "provider": "github"},
+            user_agent=request.headers.get("user-agent"),
+        )
+    except Exception as exc:
+        logger.warning(f"Failed to record GitHub audit event: {exc}")
+
     return RedirectResponse(
         f"{FRONTEND_URL}/auth/callback?token={token}&name={urllib.parse.quote(user.name)}&email={urllib.parse.quote(user.email)}"
     )

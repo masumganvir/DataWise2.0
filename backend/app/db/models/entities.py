@@ -59,7 +59,7 @@ class User(Base):
     """Primary user identity with authentication and status."""
     __tablename__ = "users"
 
-    id: str = Column(String(36), primary_key=True, default=_uuid)
+    id: str = Column(String(128), primary_key=True, default=_uuid)
     email: str = Column(String(255), unique=True, nullable=False, index=True)
     name: str = Column(String(255), nullable=False)
     password_hash: str = Column(String(255), nullable=False)
@@ -67,6 +67,8 @@ class User(Base):
     status: str = Column(String(50), default="active", nullable=False, index=True)  # active | suspended | pending
     is_active: bool = Column(Boolean, default=True, nullable=False)
     organization_id: Optional[str] = Column(String(36), nullable=True, index=True)
+    avatar_url: Optional[str] = Column(String(500), nullable=True)
+    preferences: Optional[dict] = Column(JSON, default=dict, nullable=True)
     created_at: datetime = Column(DateTime, server_default=func.now(), nullable=False, index=True)
     updated_at: datetime = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
     last_login_at: Optional[datetime] = Column(DateTime, nullable=True)
@@ -84,7 +86,7 @@ class UserSession(Base):
     __tablename__ = "user_sessions"
 
     id: str = Column(String(36), primary_key=True, default=_uuid)
-    user_id: str = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: str = Column(String(128), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     token_hash: str = Column(String(255), nullable=False, index=True)
     expires_at: datetime = Column(DateTime, nullable=False, index=True)
     created_at: datetime = Column(DateTime, server_default=func.now(), nullable=False)
@@ -98,7 +100,7 @@ class ApiKey(Base):
     __tablename__ = "api_keys"
 
     id: str = Column(String(36), primary_key=True, default=_uuid)
-    user_id: str = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: str = Column(String(128), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     name: str = Column(String(255), nullable=False)
     key_hash: str = Column(String(255), nullable=False)
     key_prefix: str = Column(String(16), nullable=False, index=True)
@@ -121,7 +123,7 @@ class Project(Base):
 
     id: str = Column(String(36), primary_key=True, default=_uuid)
     slug: str = Column(String(255), nullable=True, unique=True, index=True)
-    user_id: str = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: str = Column(String(128), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     organization_id: Optional[str] = Column(String(36), nullable=True, index=True)
     name: str = Column(String(255), nullable=False)
     description: Optional[str] = Column(Text, nullable=True)
@@ -132,6 +134,12 @@ class Project(Base):
     current_run_id: Optional[str] = Column(String(36), nullable=True)
     latest_model_id: Optional[str] = Column(String(36), nullable=True)
     latest_model_version: Optional[str] = Column(String(50), nullable=True)
+    prompt_a: Optional[str] = Column(Text, nullable=True)
+    prompt_b: Optional[str] = Column(Text, nullable=True)
+    tuning_mode: Optional[str] = Column(String(50), default="hybrid", nullable=True)
+    locked_parameters: Optional[dict] = Column(JSON, default=dict, nullable=True)
+    problem_specification: Optional[dict] = Column(JSON, nullable=True)
+    experiment_plan: Optional[dict] = Column(JSON, nullable=True)
     configuration: Optional[dict] = Column(JSON, nullable=True)
     project_metadata: Optional[dict] = Column("project_metadata", JSON, nullable=True)
     created_at: datetime = Column(DateTime, server_default=func.now(), nullable=False, index=True)
@@ -158,6 +166,10 @@ class ProjectPrompt(Base):
     project_id: str = Column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     version: int = Column(Integer, default=1, nullable=False)
     content: str = Column(Text, nullable=False)
+    prompt_a: Optional[str] = Column(Text, nullable=True)
+    prompt_b: Optional[str] = Column(Text, nullable=True)
+    structured_interpretation: Optional[dict] = Column(JSON, nullable=True)
+    user_confirmed: bool = Column(Boolean, default=False, nullable=False)
     created_by: str = Column(String(36), nullable=False)
     created_at: datetime = Column(DateTime, server_default=func.now(), nullable=False)
     is_active: bool = Column(Boolean, default=True, nullable=False)
@@ -826,7 +838,7 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id: str = Column(String(36), primary_key=True, default=_uuid)
-    user_id: Optional[str] = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    user_id: Optional[str] = Column(String(128), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     project_id: Optional[str] = Column(String(36), nullable=True, index=True)
     action: str = Column(String(100), nullable=False, index=True)  # login | upload | train | promote | deploy | delete
     resource_type: str = Column(String(100), nullable=False)
@@ -1040,3 +1052,21 @@ class OnlineLearningEvent(Base):
     is_promoted: bool = Column(Boolean, default=True, nullable=False)
     validation_status: str = Column(String(50), default="accepted", nullable=False)
     created_at: datetime = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+# ================================================================== #
+#  12. INFORMATION & NOTES STORAGE
+# ================================================================== #
+
+class InfoRecord(Base):
+    """User-submitted information, notes, and workspace metadata stored in database."""
+    __tablename__ = "info_records"
+
+    id: str = Column(String(36), primary_key=True, default=_uuid)
+    title: Optional[str] = Column(String(255), nullable=True)
+    content: str = Column(Text, nullable=False)
+    category: Optional[str] = Column(String(100), default="general", nullable=False)
+    user_email: Optional[str] = Column(String(255), nullable=True, index=True)
+    metadata_json: Optional[dict] = Column(JSON, default=dict, nullable=True)
+    created_at: datetime = Column(DateTime, server_default=func.now(), nullable=False, index=True)
+    updated_at: datetime = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)

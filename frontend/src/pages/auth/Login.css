@@ -1,0 +1,378 @@
+/* ─────────────────────────────────────────────────────────────
+   DataWise AI — Premium Neural Login & Provisioning Styles
+   Artisanal design system with glassmorphism, smooth transitions,
+   and responsive split-screen orchestration.
+   ───────────────────────────────────────────────────────────── */
+
+.dw-login-root {
+  min-height: 100vh;
+  width: 100%;
+  background-color: #07090e;
+  color: #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow-x: hidden;
+  font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+@media (min-width: 1024px) {
+  .dw-login-root {
+    flex-direction: row;
+  }
+}
+
+/* ── Left Orchestrator Panel ────────────────────────────────── */
+.dw-orchestrator-panel {
+  width: 100%;
+  min-height: 580px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 2.25rem 2rem;
+  background: radial-gradient(circle at 20% 25%, #0f1629 0%, #07090e 75%);
+  overflow: hidden;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+@media (min-width: 1024px) {
+  .dw-orchestrator-panel {
+    width: 55%;
+    max-width: 55%;
+    min-height: 100vh;
+    padding: 3.5rem 3.5rem;
+    border-bottom: none;
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+  }
+}
+
+/* Subtle atmospheric mesh background glow */
+.dw-ambient-glow-1 {
+  position: absolute;
+  top: -10%;
+  left: -10%;
+  width: 500px;
+  height: 500px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.12) 0%, transparent 70%);
+  filter: blur(80px);
+  pointer-events: none;
+}
+
+.dw-ambient-glow-2 {
+  position: absolute;
+  bottom: -15%;
+  right: -10%;
+  width: 600px;
+  height: 600px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.14) 0%, transparent 70%);
+  filter: blur(90px);
+  pointer-events: none;
+}
+
+/* Interactive Agent Nodes */
+.dw-nodes-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.85rem;
+  margin-top: 1.5rem;
+}
+
+@media (min-width: 640px) {
+  .dw-nodes-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.dw-node-card {
+  background: rgba(18, 24, 38, 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 1rem 1.15rem;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.dw-node-card:hover {
+  background: rgba(26, 34, 54, 0.85);
+  border-color: rgba(56, 189, 248, 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 0 20px rgba(56, 189, 248, 0.1);
+}
+
+.dw-node-card.active {
+  background: rgba(22, 32, 54, 0.95);
+  border-color: #38bdf8;
+  box-shadow: 0 12px 30px -5px rgba(0, 0, 0, 0.5), 0 0 25px rgba(56, 189, 248, 0.2);
+}
+
+/* ── Right Portal Panel ─────────────────────────────────────── */
+.dw-portal-panel {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1.5rem;
+  background-color: #07090e;
+  position: relative;
+}
+
+@media (min-width: 1024px) {
+  .dw-portal-panel {
+    width: 45%;
+    max-width: 45%;
+    min-height: 100vh;
+    padding: 3.5rem 3rem;
+  }
+}
+
+.dw-portal-card {
+  width: 100%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  position: relative;
+  z-index: 10;
+}
+
+/* Pill Switcher */
+.dw-segmented-tab {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 3px;
+  background: rgba(18, 24, 38, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+  position: relative;
+}
+
+.dw-tab-btn {
+  padding: 0.55rem 1rem;
+  font-size: 0.825rem;
+  font-weight: 500;
+  border-radius: 8px;
+  color: #94a3b8;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.dw-tab-btn.active {
+  background: #38bdf8;
+  color: #041019;
+  font-weight: 600;
+  box-shadow: 0 2px 10px rgba(56, 189, 248, 0.25);
+}
+
+.dw-tab-btn:hover:not(.active) {
+  color: #f1f5f9;
+}
+
+/* Input Fields */
+.dw-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.dw-input-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+}
+
+.dw-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.dw-input {
+  width: 100%;
+  background: rgba(14, 19, 31, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 0.65rem 2.4rem 0.65rem 0.85rem;
+  color: #f8fafc;
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+}
+
+.dw-input:focus {
+  outline: none;
+  border-color: #38bdf8;
+  background: rgba(18, 25, 41, 0.9);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
+}
+
+.dw-input::placeholder {
+  color: #475569;
+}
+
+.dw-input-icon {
+  position: absolute;
+  right: 0.75rem;
+  color: #64748b;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* SSO Providers */
+.dw-sso-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.dw-sso-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 0.65rem 1rem;
+  background: rgba(18, 24, 38, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: #e2e8f0;
+  font-size: 0.825rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.dw-sso-btn:hover {
+  background: rgba(26, 35, 56, 0.85);
+  border-color: rgba(255, 255, 255, 0.16);
+  transform: translateY(-1px);
+}
+
+/* Framework Selector Pills */
+.dw-fw-pill {
+  padding: 0.35rem 0.75rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(18, 24, 38, 0.6);
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dw-fw-pill:hover {
+  color: #f1f5f9;
+  border-color: rgba(56, 189, 248, 0.3);
+  background: rgba(24, 32, 51, 0.8);
+}
+
+.dw-fw-pill.selected {
+  background: #38bdf8;
+  color: #041019;
+  font-weight: 600;
+  border-color: #38bdf8;
+  box-shadow: 0 2px 8px rgba(56, 189, 248, 0.25);
+}
+
+/* Submit CTA */
+.dw-submit-btn {
+  width: 100%;
+  padding: 0.75rem 1.25rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  color: #041019;
+  background: linear-gradient(135deg, #38bdf8 0%, #60a5fa 50%, #818cf8 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 20px -2px rgba(56, 189, 248, 0.35);
+}
+
+.dw-submit-btn:hover:not(:disabled) {
+  opacity: 0.95;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 25px -2px rgba(56, 189, 248, 0.45);
+}
+
+.dw-submit-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.dw-submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Security Modal */
+.dw-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 7, 13, 0.85);
+  backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  z-index: 100;
+}
+
+.dw-modal-box {
+  width: 100%;
+  max-width: 520px;
+  background: #0f1629;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 16px;
+  padding: 1.75rem;
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.7), 0 0 35px rgba(56, 189, 248, 0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* Clerk Component Integration Overrides */
+.cl-rootBox {
+  width: 100% !important;
+}
+.cl-card {
+  box-shadow: none !important;
+  background-color: transparent !important;
+}
+.cl-socialButtonsBlockButton {
+  border-radius: 8px !important;
+  transition: all 0.2s ease !important;
+}
+.cl-socialButtonsBlockButton:hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(56, 189, 248, 0.4) !important;
+}
+.cl-formButtonPrimary {
+  background: linear-gradient(135deg, #6366f1 0%, #38bdf8 100%) !important;
+  font-weight: 600 !important;
+  border-radius: 8px !important;
+}
+

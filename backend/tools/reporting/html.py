@@ -190,7 +190,7 @@ def generate_html_report(state: Dict[str, Any], output_path: Optional[str] = Non
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DataWise AI — Production Machine Learning Report</title>
+  <title>DataWise AI Production Report</title>
   <style>
     :root {{
       --bg: #090d16;

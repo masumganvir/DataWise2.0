@@ -62,6 +62,7 @@ export default function Sidebar() {
     { label: 'Reports', to: '/app/reports', icon: FileText },
     { label: 'Deployments', to: '/app/deployments', icon: Rocket },
     { label: 'Monitoring', to: '/app/monitoring', icon: ShieldCheck },
+    { label: 'Documentation', to: '/docs', icon: BookOpen },
     { label: 'Assistant', to: '/app/assistant', icon: Bot },
     { label: 'Settings', to: '/app/settings', icon: Settings },
   ]

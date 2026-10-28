@@ -17,14 +17,21 @@ import {
   GitFork,
   FileText,
   FlaskConical,
+  Plus,
 } from 'lucide-react'
 
 import { authStore } from '../services/authStore'
 import { branding } from '../config/branding'
+import { projectsApi } from '../services/api'
 
 export function Dashboard() {
   const navigate = useNavigate()
   const [storeState, setStoreState] = useState(authStore.getState())
+  const [dbProjects, setDbProjects] = useState<any[]>([])
+
+  useEffect(() => {
+    projectsApi.list().then((list) => setDbProjects(list || [])).catch(() => setDbProjects([]))
+  }, [])
 
   useEffect(() => {
     return authStore.subscribe(() => setStoreState({ ...authStore.getState() }))
@@ -103,18 +110,24 @@ export function Dashboard() {
 
         <div style={{ display: 'flex', gap: '12px' }}>
           <button
-            onClick={() => navigate('/app/datasets')}
-            className="btn btn-secondary"
-            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            onClick={() => navigate('/projects/new')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '13px 26px',
+              fontWeight: 800,
+              fontSize: '0.96rem',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%)',
+              color: '#ffffff',
+              border: '1px solid rgba(255,255,255,0.2)',
+              boxShadow: '0 8px 24px rgba(99,102,241,0.4)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
           >
-            <Upload size={16} /> Upload Dataset
-          </button>
-          <button
-            onClick={() => navigate('/app/experiments')}
-            className="btn btn-primary"
-            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-          >
-            <Play size={16} /> Run AutoML Workflow
+            <Plus size={18} strokeWidth={2.8} /> + Create New Project
           </button>
         </div>
       </div>
@@ -125,7 +138,7 @@ export function Dashboard() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>ACTIVE PROJECTS</div>
-              <div style={{ fontSize: '1.8rem', fontWeight: 800, marginTop: '6px' }}>3</div>
+              <div style={{ fontSize: '1.8rem', fontWeight: 800, marginTop: '6px' }}>{dbProjects.length}</div>
             </div>
             <div style={{ padding: '8px', borderRadius: '8px', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--primary-light)' }}>
               <FolderGit2 size={20} />

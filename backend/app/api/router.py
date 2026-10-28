@@ -23,11 +23,13 @@ from app.api.endpoints.inference import router as inference_router
 from app.api.endpoints.realtime_platform import router as realtime_platform_router
 from app.api.endpoints.projects import router as projects_router
 from app.api.endpoints.auth import router as auth_router
+from app.api.endpoints.settings import router as settings_router
 
 api_router = APIRouter()
 
 # Core routes (always available)
 api_router.include_router(auth_router, prefix="/auth", tags=["Authentication & Identity"])
+api_router.include_router(settings_router, prefix="/settings", tags=["Platform & Model Settings"])
 api_router.include_router(health_router, prefix="/health", tags=["System"])
 api_router.include_router(realtime_platform_router, tags=["Realtime AutoML & MLOps Platform"])
 api_router.include_router(projects_router, prefix="/projects", tags=["Projects & Agentic AutoML"])
@@ -41,5 +43,6 @@ api_router.include_router(reports_router, prefix="/sessions", tags=["Reports & R
 api_router.include_router(registry_router, prefix="/models", tags=["Model Registry"])
 api_router.include_router(inference_router, prefix="/models", tags=["Model Inference"])
 api_router.include_router(inference_router, prefix="/inference", tags=["Model Inference"])
+
 
 

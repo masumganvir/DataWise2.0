@@ -1,0 +1,40 @@
+erDiagram
+    User ||--o{ UserSession : has
+    User ||--o{ ApiKey : owns
+    User ||--o{ Project : creates
+    User ||--o{ AuditLog : triggers
+
+    Project ||--o{ DatasetEntity : contains
+    Project ||--o{ Experiment : manages
+    Project ||--o{ ModelEntity : registers
+    Project ||--o{ Deployment : deploys
+    Project ||--o{ ArtifactEntity : stores
+    Project ||--o{ Notebook : generates
+    Project ||--o{ Report : exports
+
+    DatasetEntity ||--o{ DatasetVersion : versions
+    DatasetVersion ||--o{ DatasetColumn : schema
+    DatasetVersion ||--o{ DatasetProfile : profiled_by
+    DatasetVersion ||--o{ DataQualityReport : quality_checked_by
+
+    Experiment ||--o{ ExperimentRun : executes
+    ExperimentRun ||--o{ PreprocessingRun : prepares
+    ExperimentRun ||--o{ ModelCandidate : evaluates
+    ModelCandidate ||--o{ TrainingRun : trains
+    TrainingRun ||--o{ ModelMetric : measures
+    TrainingRun ||--o{ CrossValidationResult : validates
+    TrainingRun ||--o{ HyperparameterRun : tunes
+
+    ModelEntity ||--o{ ModelVersion : versions
+    ModelVersion ||--o{ EvaluationResult : evaluated_by
+    ModelVersion ||--o{ OverfittingReport : audited_by
+    ModelVersion ||--o{ ExplainabilityResult : explained_by
+    ModelVersion ||--o{ Deployment : deployed_in
+
+    Deployment ||--o{ PredictionRequest : serves
+    Deployment ||--o{ MonitoringMetric : tracks
+    Deployment ||--o{ DriftReport : detects
+
+    Project ||--o{ AgentRun : logs
+    AgentRun ||--o{ AgentEvent : records
+    Project ||--o{ UserDecisionRecord : governs

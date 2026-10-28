@@ -91,13 +91,23 @@ class AgentState(TypedDict, total=False):
     errors: List[Dict[str, Any]]
     # 13. Deep Learning & Runtime Flags
     dataset_rows: int
-
     deep_learning_allowed: bool
     deep_learning_metrics: Dict[str, Any]
     current_agent: str
     current_step: str
     completed_steps: List[str]
     loop_counters: Dict[str, int]
+
+    # 14. Adaptive AutoML & Dual Mandatory Prompts (Section 2, 3, 4)
+    prompt_a: str
+    prompt_b: str
+    tuning_mode: str
+    locked_parameters: Dict[str, Any]
+    user_parameters: Dict[str, Any]
+    problem_specification: Dict[str, Any]
+    experiment_plan: Dict[str, Any]
+    trials: List[Dict[str, Any]]
+    champion_pipeline_path: Optional[str]
 
 
 

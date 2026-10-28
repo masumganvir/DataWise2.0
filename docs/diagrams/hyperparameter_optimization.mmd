@@ -1,0 +1,41 @@
+graph TB
+    subgraph "User Configuration & Tuning Mode"
+        UserParams["User UI Controls (Stage 4 Workbench)"]
+        TuningMode{"Tuning Mode:\n- 'manual' (Use exact user values)\n- 'agent' (Fully autonomous search)\n- 'hybrid' (Lock user values, search remainder)"}
+        LockedParams["Locked Parameters (e.g., n_estimators=200, max_depth=6)"]
+    end
+
+    subgraph "Technique Registry & Search Space Definition"
+        Registry["TechniqueRegistry: Supported Estimator Catalog"]
+        BaseDistributions["Algorithm Default Parameter Bounds:\n(e.g., learning_rate: [1e-3, 0.3], C: [0.01, 10.0])"]
+        ValidatedSpace["Merged Search Space with Locked Invariants"]
+    end
+
+    subgraph "Optuna TPE Execution Engine"
+        StudyInit["Initialize Optuna Study (Sampler: TPESampler, Direction: Maximize/Minimize)"]
+        TrialGen["Generate Trial Configuration"]
+        Pruner{"Successive Halving / Median Pruner"}
+        TrialTrain["Train on CV Folds"]
+        RecordTrial["Record Trial Score & Update TPE Priors"]
+    end
+
+    subgraph "Results & Comparison"
+        CandidateRanking["Rank All Trials & Baseline Models"]
+        BestCandidate["Select Best Configuration per Algorithm Family"]
+        UserOverride["Optional User Manual Champion Selection"]
+    end
+
+    UserParams --> TuningMode
+    TuningMode --> LockedParams
+    LockedParams --> ValidatedSpace
+    Registry --> BaseDistributions --> ValidatedSpace
+    ValidatedSpace --> StudyInit
+    StudyInit --> TrialGen
+    TrialGen --> Pruner
+    Pruner -->|Promising| TrialTrain
+    Pruner -->|Underperforming| EarlyStop["Prune Trial Early"]
+    TrialTrain --> RecordTrial
+    RecordTrial -->|Next Iteration| TrialGen
+    RecordTrial --> CandidateRanking
+    CandidateRanking --> BestCandidate
+    BestCandidate --> UserOverride

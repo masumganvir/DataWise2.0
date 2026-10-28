@@ -54,6 +54,18 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
     # ------------------------------------------------------------------ #
+    #  Clerk Authentication & Identity Provider
+    # ------------------------------------------------------------------ #
+    clerk_publishable_key: str = ""
+    clerk_secret_key: str = ""
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    github_client_id: str = ""
+    github_client_secret: str = ""
+    oauth_redirect_base_url: str = "http://localhost:8000"
+
+
+    # ------------------------------------------------------------------ #
     #  LLM Provider (Primary: Gemini, Fallback 1: Groq, Fallback 2: Cloudflare)
     # ------------------------------------------------------------------ #
     llm_provider: Literal["gemini", "groq", "cloudflare", "ollama", "openai"] = "gemini"

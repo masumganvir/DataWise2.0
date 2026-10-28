@@ -1,6 +1,29 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { FolderGit2, Plus, ArrowRight, Database, Box, Calendar, Tag, Shield, Search, Copy, RefreshCw, Upload } from 'lucide-react'
+import {
+  FolderGit2,
+  Plus,
+  ArrowRight,
+  Database,
+  Box,
+  Calendar,
+  Tag,
+  Shield,
+  Search,
+  Copy,
+  RefreshCw,
+  Upload,
+  Trash2,
+  Zap,
+  Sparkles,
+  Layers,
+  Brain,
+  Cpu,
+  CheckCircle2,
+  Sliders,
+  BarChart3,
+  TrendingUp,
+} from 'lucide-react'
 
 import { authStore } from '../../services/authStore'
 import { projectsApi } from '../../services/api'
@@ -71,6 +94,17 @@ export function ProjectsList() {
     }
   }
 
+  const handleDeleteProject = async (e: React.MouseEvent, projId: string) => {
+    e.stopPropagation()
+    if (!window.confirm('Are you sure you want to delete this project?')) return
+    try {
+      await projectsApi.delete(projId)
+      await loadProjects()
+    } catch (err) {
+      console.error('Failed to delete project:', err)
+    }
+  }
+
   const handleSelect = (proj: any) => {
     authStore.setCurrentProject(proj)
     navigate(`/projects/${proj.id}`)
@@ -88,346 +122,577 @@ export function ProjectsList() {
   })
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '28px', maxWidth: '1440px', margin: '0 auto', width: '100%' }}>
+      {/* ── Top Header with BIG New Project Button ── */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px' }}>
         <div>
-          <h1 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0 }}>Projects Workspace</h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: '4px 0 0 0' }}>
-            Multi-tenant isolated data science environments. Every project strictly encapsulates datasets, models, and artifacts.
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <span style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--primary-light)' }}>
+              AI Workspace Hub
+            </span>
+            <span style={{ fontSize: '0.72rem', background: 'rgba(99,102,241,0.15)', color: '#818cf8', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>
+              Database Persisted
+            </span>
+          </div>
+          <h1 style={{ fontSize: '1.9rem', fontWeight: 900, margin: 0, letterSpacing: '-0.02em', color: '#f8fafc' }}>
+            Projects Workspace
+          </h1>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.92rem', margin: '6px 0 0 0', maxWidth: '640px' }}>
+            Multi-tenant isolated data science environments. Upload your dataset, formulate your problem, and let specialized agents build and tune optimal models step-by-step.
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <div style={{ position: 'relative', minWidth: '240px' }}>
-            <Search size={15} style={{ position: 'absolute', left: '12px', top: '10px', color: 'var(--text-muted)' }} />
-            <input
-              type="text"
-              placeholder="Search projects..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '8px 12px 8px 34px',
-                borderRadius: '8px',
-                background: 'rgba(15, 23, 42, 0.6)',
-                border: '1px solid var(--border-subtle)',
-                color: '#f8fafc',
-                fontSize: '0.85rem',
-              }}
-            />
-          </div>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="btn btn-primary"
-            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+        <div style={{ display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {projects.length > 0 && (
+            <div style={{ position: 'relative', minWidth: '240px' }}>
+              <Search size={16} style={{ position: 'absolute', left: '12px', top: '12px', color: 'var(--text-muted)' }} />
+              <input
+                type="text"
+                placeholder="Search your projects..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 14px 10px 36px',
+                  borderRadius: '10px',
+                  background: 'rgba(15, 23, 42, 0.6)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  color: '#f8fafc',
+                  fontSize: '0.88rem',
+                  outline: 'none',
+                }}
+              />
+            </div>
+          )}
+
+          {/* ── BIG NEW PROJECT BUTTON (Required Specification) ── */}
+          <Link
+            to="/projects/new"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '13px 26px',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%)',
+              color: '#ffffff',
+              fontWeight: 800,
+              fontSize: '0.96rem',
+              textDecoration: 'none',
+              boxShadow: '0 8px 24px rgba(99, 102, 241, 0.4), inset 0 1px 1px rgba(255,255,255,0.3)',
+              transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+              cursor: 'pointer',
+              border: '1px solid rgba(255,255,255,0.2)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)'
+              e.currentTarget.style.boxShadow = '0 12px 30px rgba(99, 102, 241, 0.6), inset 0 1px 1px rgba(255,255,255,0.4)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = '0 8px 24px rgba(99, 102, 241, 0.4), inset 0 1px 1px rgba(255,255,255,0.3)'
+            }}
           >
-            <Plus size={16} /> New Project
-          </button>
+            <Plus size={19} strokeWidth={2.8} />
+            <span>Create New Project</span>
+            <Sparkles size={16} color="#fde047" />
+          </Link>
         </div>
       </div>
 
-      {/* Projects Grid or Empty State */}
+      {/* ── Loading State ── */}
       {isLoading ? (
-        <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-muted)' }}>
-          <RefreshCw size={24} className="spin" style={{ marginBottom: '12px' }} />
-          <div>Loading projects...</div>
+        <div style={{ padding: '80px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
+          <RefreshCw size={28} className="spin" style={{ marginBottom: '14px', color: '#818cf8' }} />
+          <div style={{ fontSize: '0.95rem', fontWeight: 600 }}>Loading workspace database...</div>
         </div>
       ) : filteredProjects.length === 0 ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          {/* Hero Empty State */}
+        /* ══════════════════════════════════════════════════════════════
+           ZERO PROJECTS WELCOME HERO (Clean Slate After Login)
+        ══════════════════════════════════════════════════════════════ */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
           <div
             style={{
-              background: 'linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(168,85,247,0.06) 100%)',
-              border: '1px dashed rgba(99,102,241,0.3)',
-              borderRadius: 'var(--radius-xl)',
-              padding: '48px 24px',
+              background: 'linear-gradient(135deg, rgba(30, 27, 75, 0.5) 0%, rgba(15, 23, 42, 0.8) 100%)',
+              border: '1px solid rgba(99, 102, 241, 0.25)',
+              borderRadius: '24px',
+              padding: '52px 36px',
               textAlign: 'center',
+              boxShadow: '0 16px 48px rgba(0, 0, 0, 0.35)',
+              position: 'relative',
+              overflow: 'hidden',
             }}
           >
+            {/* Ambient Background Aura */}
             <div
               style={{
-                width: '72px', height: '72px', borderRadius: '20px',
-                background: 'linear-gradient(135deg, rgba(99,102,241,0.2) 0%, rgba(168,85,247,0.15) 100%)',
-                color: '#818cf8',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                margin: '0 auto 20px',
-                boxShadow: '0 8px 24px rgba(99,102,241,0.2)',
+                position: 'absolute',
+                top: '-50px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                width: '400px',
+                height: '180px',
+                background: 'radial-gradient(circle, rgba(99, 102, 241, 0.25) 0%, transparent 70%)',
+                filter: 'blur(40px)',
+                pointerEvents: 'none',
+              }}
+            />
+
+            <div
+              style={{
+                width: '80px',
+                height: '80px',
+                borderRadius: '24px',
+                background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.25) 0%, rgba(168, 85, 247, 0.2) 100%)',
+                border: '1px solid rgba(99, 102, 241, 0.4)',
+                color: '#a5b4fc',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 22px',
+                boxShadow: '0 8px 30px rgba(99, 102, 241, 0.25)',
               }}
             >
-              <FolderGit2 size={34} />
+              <FolderGit2 size={38} strokeWidth={2} />
             </div>
-            <h3 style={{ fontSize: '1.4rem', fontWeight: 800, margin: '0 0 10px 0', letterSpacing: '-0.02em' }}>
-              {searchQuery ? 'No matching projects found' : 'Launch Your First AI Workspace'}
-            </h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', maxWidth: '480px', margin: '0 auto 28px', lineHeight: 1.6 }}>
+
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(99, 102, 241, 0.12)', border: '1px solid rgba(99,102,241,0.3)', padding: '4px 14px', borderRadius: '100px', marginBottom: '14px' }}>
+              <Sparkles size={13} color="#a5b4fc" />
+              <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#c7d2fe', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                Fresh Workspace Initialized
+              </span>
+            </div>
+
+            <h2 style={{ fontSize: '1.9rem', fontWeight: 900, margin: '0 0 12px 0', letterSpacing: '-0.02em', color: '#f8fafc' }}>
+              {searchQuery ? 'No matching projects found' : 'No Projects Created Yet'}
+            </h2>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.98rem', maxWidth: '580px', margin: '0 auto 32px', lineHeight: 1.65 }}>
               {searchQuery
-                ? `No projects matched "${searchQuery}". Try a different keyword.`
-                : 'Create an isolated project container with automatic EDA, AutoML, and model governance — powered by 47+ specialized agents.'}
+                ? `No projects matched "${searchQuery}". Clear your search query or create a new project.`
+                : 'Your workspace is empty and ready. Upload your dataset, specify the problem to solve, and our autonomous agent fleet will analyze the data, recommend the best ML algorithms, and train state-of-the-art models step-by-step.'}
             </p>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
-              <Link to="/projects/new" className="btn btn-primary" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '12px 24px', fontSize: '0.9rem' }}>
-                <Plus size={16} /> Create New Project
+
+            {/* ── EXTRA LARGE NEW PROJECT CTA BUTTON ── */}
+            <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap', alignItems: 'center' }}>
+              <Link
+                to="/projects/new"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '16px 36px',
+                  borderRadius: '14px',
+                  background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #9333ea 100%)',
+                  color: '#ffffff',
+                  fontWeight: 900,
+                  fontSize: '1.05rem',
+                  textDecoration: 'none',
+                  boxShadow: '0 12px 32px rgba(124, 58, 237, 0.45)',
+                  transition: 'all 0.25s ease',
+                  border: '1px solid rgba(255,255,255,0.25)',
+                }}
+              >
+                <Plus size={22} strokeWidth={3} />
+                <span>Create Your First Project</span>
+                <ArrowRight size={18} />
               </Link>
-              <button onClick={() => setIsModalOpen(true)} className="btn btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '12px 20px', fontSize: '0.9rem' }}>
-                <Upload size={16} /> Quick Start with Dataset
+
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(true)}
+                className="btn btn-secondary"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '16px 24px',
+                  fontSize: '0.92rem',
+                  fontWeight: 700,
+                  borderRadius: '14px',
+                }}
+              >
+                <Zap size={16} color="#fbbf24" /> Quick Name Setup
               </button>
+            </div>
+
+            {/* ── Instant Inline Quick Creator ── */}
+            <div
+              style={{
+                marginTop: '34px',
+                background: 'rgba(15, 23, 42, 0.75)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '16px',
+                padding: '20px 24px',
+                maxWidth: '620px',
+                margin: '34px auto 0',
+                textAlign: 'left',
+              }}
+            >
+              <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#a5b4fc', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Zap size={14} color="#818cf8" /> Quick Project Creator (Saved directly to database)
+              </div>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                <input
+                  type="text"
+                  placeholder="Enter project name (e.g. Sales Forecast 2026, Churn Predictor)..."
+                  value={newProjectName}
+                  onChange={(e) => setNewProjectName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleCreateProject(e) }}
+                  style={{
+                    flex: 1,
+                    minWidth: '240px',
+                    padding: '11px 16px',
+                    borderRadius: '10px',
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    color: '#fff',
+                    fontSize: '0.9rem',
+                    outline: 'none',
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={handleCreateProject}
+                  disabled={isSubmitting || !newProjectName.trim()}
+                  className="btn btn-primary"
+                  style={{ padding: '11px 20px', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 800, borderRadius: '10px' }}
+                >
+                  <Plus size={16} /> {isSubmitting ? 'Creating...' : 'Create Project'}
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* Sample Project Templates */}
-          {!searchQuery && (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, color: 'var(--text-secondary)' }}>
-                  🚀 Start from a Template
-                </h3>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Click to create from template</span>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '20px' }}>
-                {[
-                  {
-                    name: 'Customer Churn Prediction',
-                    tag: 'CLASSIFICATION',
-                    desc: 'Binary classification with ensemble ML — LightGBM, XGBoost, PyTorch neural networks, and TreeSHAP explainability.',
-                    metric: 'F1: 0.925 · ROC-AUC: 0.962',
-                    latency: '4.2ms',
-                    stage: 'Production',
-                    gradient: 'linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(168,85,247,0.08) 100%)',
-                    borderColor: 'rgba(99,102,241,0.25)',
-                    iconColor: '#818cf8',
-                    agents: 7,
-                  },
-                  {
-                    name: 'Credit Card Fraud Detector',
-                    tag: 'ANOMALY DETECTION',
-                    desc: 'Isolation Forest + PyTorch autoencoder with real-time streaming inference. PSI drift monitoring included.',
-                    metric: 'PR-AUC: 0.981 · Recall: 0.94',
-                    latency: '2.8ms',
-                    stage: 'Production',
-                    gradient: 'linear-gradient(135deg, rgba(16,185,129,0.1) 0%, rgba(6,182,212,0.07) 100%)',
-                    borderColor: 'rgba(16,185,129,0.22)',
-                    iconColor: '#34d399',
-                    agents: 9,
-                  },
-                  {
-                    name: 'LTV Revenue Regressor',
-                    tag: 'REGRESSION',
-                    desc: 'CatBoost LTV model with Optuna Bayesian HPO, temporal train/test isolation, and group k-fold validation.',
-                    metric: 'RMSE: 142.5 · R²: 0.884',
-                    latency: '5.1ms',
-                    stage: 'Staging',
-                    gradient: 'linear-gradient(135deg, rgba(245,158,11,0.1) 0%, rgba(251,146,60,0.07) 100%)',
-                    borderColor: 'rgba(245,158,11,0.22)',
-                    iconColor: '#fbbf24',
-                    agents: 6,
-                  },
-                ].map((template) => (
+          {/* ── 4-Step Process Guide for New Users ── */}
+          <div style={{ background: 'rgba(15,23,42,0.5)', border: '1px solid var(--border-subtle)', borderRadius: '20px', padding: '28px 32px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '18px' }}>
+              <Brain size={18} color="var(--primary-light)" />
+              <h3 style={{ fontSize: '1rem', fontWeight: 800, margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#cbd5e1' }}>
+                How DataWise Autonomous AI Works
+              </h3>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px' }}>
+              {[
+                {
+                  step: '01',
+                  title: 'Upload Dataset',
+                  desc: 'Provide your raw dataset file in CSV, Excel, Parquet, or JSON format. Automatic schema ingestion and profiling.',
+                  icon: Database,
+                  color: '#818cf8',
+                },
+                {
+                  step: '02',
+                  title: 'Problem & Solution Prompts',
+                  desc: 'Describe what problem you are solving (Prompt A) and your performance & operational requirements (Prompt B).',
+                  icon: Sliders,
+                  color: '#38bdf8',
+                },
+                {
+                  step: '03',
+                  title: 'Agent Analysis & Algorithm Choice',
+                  desc: 'LLM analyzes data distributions, selects the best algorithms (XGBoost, LightGBM, Random Forest, etc.) with full reasoning.',
+                  icon: Layers,
+                  color: '#a78bfa',
+                },
+                {
+                  step: '04',
+                  title: 'Step-by-Step Training & Decisions',
+                  desc: 'Watch 17 agent stages execute with human checkpoints for major changes. Deploy instant real-time prediction APIs.',
+                  icon: Cpu,
+                  color: '#34d399',
+                },
+              ].map((s) => {
+                const IconComponent = s.icon
+                return (
                   <div
-                    key={template.name}
-                    onClick={() => setIsModalOpen(true)}
-                    className="project-card"
+                    key={s.step}
                     style={{
-                      background: template.gradient,
-                      borderColor: template.borderColor,
+                      background: 'rgba(255,255,255,0.03)',
+                      border: '1px solid rgba(255,255,255,0.06)',
+                      borderRadius: '16px',
+                      padding: '20px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '10px',
                     }}
                   >
-                    <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <div
-                            style={{
-                              width: '40px', height: '40px', borderRadius: '10px',
-                              background: 'rgba(255,255,255,0.06)',
-                              color: template.iconColor,
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              border: `1px solid ${template.borderColor}`,
-                            }}
-                          >
-                            <FolderGit2 size={20} />
-                          </div>
-                          <div>
-                            <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0 }}>{template.name}</h3>
-                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                              {template.agents} specialized agents
-                            </div>
-                          </div>
-                        </div>
-                        <span
-                          style={{
-                            fontSize: '0.62rem', padding: '3px 8px',
-                            borderRadius: 'var(--radius-full)',
-                            background: template.stage === 'Production' ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)',
-                            color: template.stage === 'Production' ? 'var(--success)' : 'var(--warning)',
-                            border: `1px solid ${template.stage === 'Production' ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)'}`,
-                            fontWeight: 700, textTransform: 'uppercase' as const,
-                          }}
-                        >
-                          {template.stage}
-                        </span>
-                      </div>
-
-                      <p style={{ fontSize: '0.83rem', color: 'var(--text-secondary)', lineHeight: 1.55, marginBottom: '14px' }}>
-                        {template.desc}
-                      </p>
-
-                      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' as const }}>
-                        <span style={{
-                          fontSize: '0.68rem', padding: '2px 8px', borderRadius: 'var(--radius-full)',
-                          background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-                          color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)',
-                        }}>
-                          {template.metric}
-                        </span>
-                        <span style={{
-                          fontSize: '0.68rem', padding: '2px 8px', borderRadius: 'var(--radius-full)',
-                          background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-                          color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)',
-                        }}>
-                          p99 {template.latency}
-                        </span>
-                        <span style={{
-                          fontSize: '0.68rem', padding: '2px 8px', borderRadius: 'var(--radius-full)',
-                          background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-                          color: 'var(--text-secondary)',
-                        }}>
-                          {template.tag}
-                        </span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 900, fontFamily: 'var(--font-mono)', color: s.color }}>
+                        STEP {s.step}
+                      </span>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: s.color }}>
+                        <IconComponent size={16} />
                       </div>
                     </div>
-
-                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '14px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.75rem', color: template.iconColor, fontWeight: 600 }}>
-                          Use this template →
-                        </span>
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Template</span>
-                        </div>
-                      </div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#f8fafc' }}>
+                      {s.title}
+                    </div>
+                    <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                      {s.desc}
                     </div>
                   </div>
+                )
+              })}
+            </div>
+
+            {/* Quick Benchmark Presets */}
+            <div style={{ marginTop: '24px', paddingTop: '18px', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                Don't have a dataset file right now? Try a pre-configured benchmark scenario:
+              </span>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {[
+                  { name: 'Telecom Churn', sample: 'telecom_churn', icon: TrendingUp },
+                  { name: 'Credit Fraud', sample: 'financial_fraud', icon: Shield },
+                  { name: 'Exam Performance', sample: 'student_performance', icon: BarChart3 },
+                  { name: 'House Prices', sample: 'house_prices', icon: Box },
+                ].map((item) => (
+                  <Link
+                    key={item.sample}
+                    to={`/projects/new?sample=${item.sample}`}
+                    style={{
+                      padding: '6px 14px',
+                      borderRadius: '8px',
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      color: '#cbd5e1',
+                      fontSize: '0.76rem',
+                      fontWeight: 700,
+                      textDecoration: 'none',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      transition: 'all 0.15s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(99,102,241,0.2)'
+                      e.currentTarget.style.color = '#fff'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
+                      e.currentTarget.style.color = '#cbd5e1'
+                    }}
+                  >
+                    <span>{item.name}</span>
+                    <ArrowRight size={11} />
+                  </Link>
                 ))}
               </div>
             </div>
-          )}
+          </div>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '20px' }}>
-          {filteredProjects.map((proj) => (
-            <div
-              key={proj.id}
-              onClick={() => handleSelect(proj)}
-              className="project-card"
-            >
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div
-                      style={{
-                        width: '40px', height: '40px', borderRadius: '10px',
-                        background: 'rgba(99, 102, 241, 0.12)',
-                        color: 'var(--primary-light)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        border: '1px solid rgba(99,102,241,0.2)',
-                      }}
-                    >
-                      <FolderGit2 size={20} />
-                    </div>
-                    <div>
-                      <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {proj.name}
-                      </h3>
-                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                        Slug: {proj.slug || proj.id}
+        /* ══════════════════════════════════════════════════════════════
+           PROJECTS GRID (Populated After 1st and Subsequent Projects)
+        ══════════════════════════════════════════════════════════════ */
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '0.86rem', fontWeight: 800, color: '#f8fafc' }}>
+                Your Saved Projects
+              </span>
+              <span style={{ fontSize: '0.75rem', background: 'rgba(99,102,241,0.18)', color: '#a5b4fc', padding: '2px 10px', borderRadius: '12px', fontWeight: 800 }}>
+                {filteredProjects.length} {filteredProjects.length === 1 ? 'Project' : 'Projects'} in Database
+              </span>
+            </div>
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+              Select any project to enter its multi-agent workspace
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '22px' }}>
+            {filteredProjects.map((proj) => (
+              <div
+                key={proj.id}
+                onClick={() => handleSelect(proj)}
+                className="project-card"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: '18px',
+                  padding: '22px',
+                  cursor: 'pointer',
+                  transition: 'all 0.25s ease',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-3px)'
+                  e.currentTarget.style.borderColor = 'rgba(99,102,241,0.4)'
+                  e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,0,0,0.3)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'
+                  e.currentTarget.style.boxShadow = 'none'
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div
+                        style={{
+                          width: '44px',
+                          height: '44px',
+                          borderRadius: '12px',
+                          background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(139, 92, 246, 0.15) 100%)',
+                          color: 'var(--primary-light)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          border: '1px solid rgba(99,102,241,0.3)',
+                        }}
+                      >
+                        <FolderGit2 size={22} />
+                      </div>
+                      <div>
+                        <h3 style={{ fontSize: '1.08rem', fontWeight: 800, margin: 0, color: '#f8fafc', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {proj.name}
+                        </h3>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
+                          ID: {proj.id}
+                        </div>
                       </div>
                     </div>
+
+                    <span
+                      style={{
+                        fontSize: '0.65rem',
+                        padding: '4px 10px',
+                        borderRadius: '100px',
+                        background: proj.status === 'completed' ? 'rgba(16,185,129,0.15)' : 'rgba(99,102,241,0.15)',
+                        color: proj.status === 'completed' ? 'var(--success)' : 'var(--primary-light)',
+                        border: `1px solid ${proj.status === 'completed' ? 'rgba(16,185,129,0.3)' : 'rgba(99,102,241,0.3)'}`,
+                        fontWeight: 800,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.04em',
+                      }}
+                    >
+                      {proj.status || 'Active'}
+                    </span>
                   </div>
 
-                  <span
-                    style={{
-                      fontSize: '0.65rem', padding: '3px 8px',
-                      borderRadius: 'var(--radius-full)',
-                      background: proj.status === 'completed' ? 'rgba(16,185,129,0.12)' : 'rgba(99,102,241,0.12)',
-                      color: proj.status === 'completed' ? 'var(--success)' : 'var(--primary-light)',
-                      border: '1px solid rgba(99,102,241,0.25)',
-                      fontWeight: 700, textTransform: 'uppercase' as const,
-                    }}
-                  >
-                    {proj.status || 'Active'}
-                  </span>
-                </div>
+                  <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: '16px', minHeight: '38px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                    {proj.description || proj.objective || 'Autonomous machine learning project workspace.'}
+                  </p>
 
-                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: '14px', minHeight: '38px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>
-                  {proj.description || proj.objective || 'Autonomous machine learning project workspace.'}
-                </p>
+                  {/* Dataset & Model Overview Chips */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+                    <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.03)', padding: '7px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: 'var(--text-muted)' }}>Dataset:</span>
+                      <strong style={{ color: '#cbd5e1' }}>
+                        {proj.dataset_name || proj.configuration?.dataset_name || 'Dataset Ingested'}
+                      </strong>
+                    </div>
 
-                {/* Configuration Specs */}
-                {proj.configuration?.dataset_name && (
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '12px', background: 'rgba(255,255,255,0.03)', padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
-                    Dataset: <strong style={{ color: '#cbd5e1' }}>{proj.configuration.dataset_name}</strong>
+                    <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.03)', padding: '7px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: 'var(--text-muted)' }}>Champion Model:</span>
+                      <strong style={{ color: '#a5b4fc' }}>
+                        {proj.best_model || proj.configuration?.best_model || 'Ready to Run'}
+                      </strong>
+                    </div>
                   </div>
-                )}
-              </div>
+                </div>
 
-              {/* Footer */}
-              <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '14px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <button
-                    onClick={(e) => handleCloneProject(e, proj.id)}
-                    title="Clone Project Configuration"
-                    style={{
-                      background: 'transparent', border: '1px solid var(--border-subtle)',
-                      borderRadius: '6px', padding: '6px 10px',
-                      color: 'var(--text-muted)', fontSize: '0.75rem',
-                      cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px',
-                    }}
-                  >
-                    <Copy size={12} /> Clone
-                  </button>
+                {/* Footer Actions */}
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '14px', marginTop: 'auto' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button
+                        type="button"
+                        onClick={(e) => handleCloneProject(e, proj.id)}
+                        title="Clone Project Configuration"
+                        style={{
+                          background: 'rgba(255,255,255,0.04)',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          borderRadius: '8px',
+                          padding: '6px 10px',
+                          color: 'var(--text-muted)',
+                          fontSize: '0.74rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                        }}
+                      >
+                        <Copy size={12} /> Clone
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteProject(e, proj.id)}
+                        title="Delete Project"
+                        style={{
+                          background: 'rgba(239, 68, 68, 0.08)',
+                          border: '1px solid rgba(239, 68, 68, 0.25)',
+                          borderRadius: '8px',
+                          padding: '6px 10px',
+                          color: '#f87171',
+                          fontSize: '0.74rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                        }}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
 
-                  <button
-                    onClick={() => handleSelect(proj)}
-                    className="btn btn-primary"
-                    style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', padding: '6px 14px' }}
-                  >
-                    <span>Open Workspace</span>
-                    <ArrowRight size={13} />
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSelect(proj)}
+                      className="btn btn-primary"
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', padding: '8px 16px', borderRadius: '8px', fontWeight: 700 }}
+                    >
+                      <span>Open Workspace</span>
+                      <ArrowRight size={14} />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
 
-
-      {/* Create Project Modal */}
+      {/* ── Create Project Quick Modal ── */}
       {isModalOpen && (
         <div className="cmd-palette-backdrop" onClick={() => setIsModalOpen(false)}>
-          <div className="cmd-palette-modal" style={{ padding: '24px' }} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '8px' }}>Create New Project</h2>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '20px' }}>
-              Create an isolated project container for datasets, pipeline graphs, and model registry artifacts.
+          <div className="cmd-palette-modal" style={{ padding: '28px', maxWidth: '520px', borderRadius: '20px' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+              <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(99,102,241,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#818cf8' }}>
+                <Plus size={20} />
+              </div>
+              <div>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, color: '#f8fafc' }}>Create New ML Project</h2>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Saved directly to your persistent database</span>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: '12px 0 20px 0', lineHeight: 1.5 }}>
+              Creates an isolated data science environment with dedicated storage, models, and artifact registries.
             </p>
 
             <form onSubmit={handleCreateProject} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
+                <label style={{ fontSize: '0.78rem', fontWeight: 700, display: 'block', marginBottom: '6px', color: '#cbd5e1' }}>
                   Project Name *
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Credit Card Fraud Detector"
+                  placeholder="e.g. Telecom Customer Churn, Fraud Detector"
                   value={newProjectName}
                   onChange={(e) => setNewProjectName(e.target.value)}
                   className="form-input"
+                  style={{ width: '100%', boxSizing: 'border-box' }}
                 />
               </div>
 
               <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
+                <label style={{ fontSize: '0.78rem', fontWeight: 700, display: 'block', marginBottom: '6px', color: '#cbd5e1' }}>
                   Description / Objective
                 </label>
                 <textarea
@@ -436,17 +701,19 @@ export function ProjectsList() {
                   value={newProjectDesc}
                   onChange={(e) => setNewProjectDesc(e.target.value)}
                   className="form-textarea"
+                  style={{ width: '100%', boxSizing: 'border-box' }}
                 />
               </div>
 
               <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
+                <label style={{ fontSize: '0.78rem', fontWeight: 700, display: 'block', marginBottom: '6px', color: '#cbd5e1' }}>
                   Primary Objective
                 </label>
                 <select
                   value={newProjectTag}
                   onChange={(e) => setNewProjectTag(e.target.value)}
                   className="form-select"
+                  style={{ width: '100%', boxSizing: 'border-box' }}
                 >
                   <option value="Classification">Supervised Classification</option>
                   <option value="Regression">Supervised Regression</option>
@@ -460,7 +727,7 @@ export function ProjectsList() {
                 <button type="button" onClick={() => setIsModalOpen(false)} className="btn btn-secondary">
                   Cancel
                 </button>
-                <button type="submit" disabled={isSubmitting} className="btn btn-primary">
+                <button type="submit" disabled={isSubmitting} className="btn btn-primary" style={{ padding: '10px 22px', fontWeight: 800 }}>
                   {isSubmitting ? 'Creating...' : 'Create Workspace'}
                 </button>
               </div>

@@ -21,26 +21,33 @@ ALTER TABLE IF EXISTS deployments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS model_monitoring ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS audit_logs ENABLE ROW LEVEL SECURITY;
 
+-- Security Policy: Dedicated Super-Administrator Role
+-- Dedicated Database Administrator: ONLY masumganvir2006@gmail.com is authorized for administrative DB access.
+CREATE OR REPLACE FUNCTION public.is_database_admin()
+RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER AS $$
+    SELECT LOWER(COALESCE(auth.jwt() ->> 'email', '')) = 'masumganvir2006@gmail.com';
+$$;
+
 -- 2. USERS Table Policies
--- Users can only read and update their own profile
+-- Users can only read and update their own profile; Super Admin can view all
 DROP POLICY IF EXISTS "Users can read own profile" ON users;
 CREATE POLICY "Users can read own profile"
     ON users FOR SELECT
-    USING (auth.uid()::text = id::text OR auth.role() = 'service_role');
+    USING (auth.uid()::text = id::text OR public.is_database_admin() OR auth.role() = 'service_role');
 
 DROP POLICY IF EXISTS "Users can update own profile" ON users;
 CREATE POLICY "Users can update own profile"
     ON users FOR UPDATE
-    USING (auth.uid()::text = id::text OR auth.role() = 'service_role')
-    WITH CHECK (auth.uid()::text = id::text OR auth.role() = 'service_role');
+    USING (auth.uid()::text = id::text OR public.is_database_admin() OR auth.role() = 'service_role')
+    WITH CHECK (auth.uid()::text = id::text OR public.is_database_admin() OR auth.role() = 'service_role');
 
 -- 3. PROJECTS Table Policies
--- Strict User Isolation: owner_id must match auth.uid()
+-- Strict User Isolation: owner_id must match auth.uid(), or super-admin masumganvir2006@gmail.com
 DROP POLICY IF EXISTS "Users can manage own projects" ON projects;
 CREATE POLICY "Users can manage own projects"
     ON projects FOR ALL
-    USING (auth.uid()::text = user_id::text OR auth.role() = 'service_role')
-    WITH CHECK (auth.uid()::text = user_id::text OR auth.role() = 'service_role');
+    USING (auth.uid()::text = user_id::text OR public.is_database_admin() OR auth.role() = 'service_role')
+    WITH CHECK (auth.uid()::text = user_id::text OR public.is_database_admin() OR auth.role() = 'service_role');
 
 -- 4. DATASETS Table Policies
 DROP POLICY IF EXISTS "Users can manage own datasets" ON datasets;
@@ -50,14 +57,14 @@ CREATE POLICY "Users can manage own datasets"
         EXISTS (
             SELECT 1 FROM projects
             WHERE projects.id = datasets.project_id
-            AND (projects.user_id::text = auth.uid()::text OR auth.role() = 'service_role')
+            AND (projects.user_id::text = auth.uid()::text OR public.is_database_admin() OR auth.role() = 'service_role')
         )
     )
     WITH CHECK (
         EXISTS (
             SELECT 1 FROM projects
             WHERE projects.id = datasets.project_id
-            AND (projects.user_id::text = auth.uid()::text OR auth.role() = 'service_role')
+            AND (projects.user_id::text = auth.uid()::text OR public.is_database_admin() OR auth.role() = 'service_role')
         )
     );
 
@@ -69,7 +76,7 @@ CREATE POLICY "Users can view own runs"
         EXISTS (
             SELECT 1 FROM projects
             WHERE projects.id = runs.project_id
-            AND (projects.user_id::text = auth.uid()::text OR auth.role() = 'service_role')
+            AND (projects.user_id::text = auth.uid()::text OR public.is_database_admin() OR auth.role() = 'service_role')
         )
     );
 
@@ -82,7 +89,7 @@ CREATE POLICY "Users can access own artifacts"
         EXISTS (
             SELECT 1 FROM projects
             WHERE projects.id = artifacts.project_id
-            AND (projects.user_id::text = auth.uid()::text OR auth.role() = 'service_role')
+            AND (projects.user_id::text = auth.uid()::text OR public.is_database_admin() OR auth.role() = 'service_role')
         )
     );
 
@@ -94,7 +101,7 @@ CREATE POLICY "Users can manage own models"
         EXISTS (
             SELECT 1 FROM projects
             WHERE projects.id = models.project_id
-            AND (projects.user_id::text = auth.uid()::text OR auth.role() = 'service_role')
+            AND (projects.user_id::text = auth.uid()::text OR public.is_database_admin() OR auth.role() = 'service_role')
         )
     );
 
@@ -106,7 +113,7 @@ CREATE POLICY "Users can view own predictions"
         EXISTS (
             SELECT 1 FROM projects
             WHERE projects.id = predictions.project_id
-            AND (projects.user_id::text = auth.uid()::text OR auth.role() = 'service_role')
+            AND (projects.user_id::text = auth.uid()::text OR public.is_database_admin() OR auth.role() = 'service_role')
         )
     );
 
@@ -114,4 +121,5 @@ CREATE POLICY "Users can view own predictions"
 DROP POLICY IF EXISTS "Users can view own audit logs" ON audit_logs;
 CREATE POLICY "Users can view own audit logs"
     ON audit_logs FOR SELECT
-    USING (auth.uid()::text = user_id::text OR auth.role() = 'service_role');
+    USING (auth.uid()::text = user_id::text OR public.is_database_admin() OR auth.role() = 'service_role');
+

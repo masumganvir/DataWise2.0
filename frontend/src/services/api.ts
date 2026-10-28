@@ -342,7 +342,17 @@ export const projectsApi = {
   get: (projectId: string): Promise<any> =>
     apiClient.get(`/projects/${projectId}`).then((r) => r.data),
 
-  create: (data: { name: string; description?: string; objective?: string; prompt?: string; configuration?: any }): Promise<any> =>
+  create: (data: {
+    name: string;
+    description?: string;
+    objective?: string;
+    prompt?: string;
+    prompt_a?: string;
+    prompt_b?: string;
+    tuning_mode?: string;
+    locked_parameters?: any;
+    configuration?: any;
+  }): Promise<any> =>
     apiClient.post('/projects', data).then((r) => r.data),
 
   update: (projectId: string, data: any): Promise<any> =>
@@ -415,6 +425,21 @@ export const projectsApi = {
 
   regeneratePlan: (projectId: string, data?: { prompt?: string; custom_name?: string }): Promise<any> =>
     apiClient.post(`/projects/${projectId}/plan/regenerate`, data || {}).then((r) => r.data),
+
+  formulate: (projectId: string, data: { prompt_a: string; prompt_b: string }): Promise<any> =>
+    apiClient.post(`/projects/${projectId}/formulate`, data).then((r) => r.data),
+
+  getHyperparameterSchemas: (projectId: string, taskType?: string): Promise<any> =>
+    apiClient.get(`/projects/${projectId}/hyperparameters/schema`, { params: { task_type: taskType } }).then((r) => r.data),
+
+  validateHyperparameters: (projectId: string, data: { algorithm_id: string; parameters: Record<string, any> }): Promise<any> =>
+    apiClient.post(`/projects/${projectId}/hyperparameters/validate`, data).then((r) => r.data),
+
+  getTrials: (projectId: string, runId: string): Promise<any> =>
+    apiClient.get(`/projects/${projectId}/runs/${runId}/trials`).then((r) => r.data),
+
+  selectModel: (projectId: string, runId: string, algorithmId: string): Promise<any> =>
+    apiClient.post(`/projects/${projectId}/runs/${runId}/select-model`, { algorithm_id: algorithmId }).then((r) => r.data),
 
   clone: (projectId: string): Promise<any> =>
     apiClient.post(`/projects/${projectId}/clone`).then((r) => r.data),

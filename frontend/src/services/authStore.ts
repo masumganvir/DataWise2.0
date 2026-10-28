@@ -138,11 +138,16 @@ class AuthStore {
   }
 
   // ── Verify token and refresh user profile from backend ─────
+  // Uses a 4-second timeout so a downed backend never blocks the UI.
   private async _verifyToken(token: string): Promise<void> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
     try {
       const resp = await fetch(`${API_BASE}/api/auth/me`, {
         headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
       if (resp.ok) {
         const userData = await resp.json();
         const profile: UserProfile = {
@@ -161,12 +166,18 @@ class AuthStore {
           isAuthenticated: true,
           isLoading: false,
         };
-      } else {
-        // Token invalid / expired
+      } else if (resp.status === 401 || resp.status === 403) {
+        // Token truly invalid — clear it
+        clearTimeout(timeoutId);
         this._clearSession();
+      } else {
+        // Server error but token may still be valid — keep session, stop loading
+        clearTimeout(timeoutId);
+        this.state.isLoading = false;
       }
     } catch {
-      // Network error — keep existing session data but mark not loading
+      // Network error or timeout — keep existing session data, stop loading
+      clearTimeout(timeoutId);
       this.state.isLoading = false;
     }
     this.notify();
@@ -198,34 +209,49 @@ class AuthStore {
   }
 
   // ── Email/password registration via backend API ────────────
-  public async signUp(email: string, password: string, name: string): Promise<void> {
-    const resp = await fetch(`${API_BASE}/api/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, name }),
-    });
-    const data = await resp.json();
-    if (!resp.ok) {
-      throw new Error(data.detail || 'Registration failed.');
+  public async signUp(email: string, password: string, name: string, framework?: string): Promise<void> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    try {
+      const resp = await fetch(`${API_BASE}/api/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, name, framework }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.detail || 'Registration failed.');
+      const { access_token, user } = data;
+      this._applySession(access_token, user);
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (err?.name === 'AbortError') throw new Error('Backend server is not running. Please use Clerk Universal Auth instead.');
+      throw err;
     }
-    // Auto-login after registration
-    const { access_token, user } = data;
-    this._applySession(access_token, user);
   }
 
   // ── Email/password sign-in via backend API ─────────────────
   public async signIn(email: string, password: string): Promise<void> {
-    const resp = await fetch(`${API_BASE}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    const data = await resp.json();
-    if (!resp.ok) {
-      throw new Error(data.detail || 'Incorrect email or password.');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    try {
+      const resp = await fetch(`${API_BASE}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.detail || 'Incorrect email or password.');
+      const { access_token, user } = data;
+      this._applySession(access_token, user);
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (err?.name === 'AbortError') throw new Error('Backend server is not running. Please use Clerk Universal Auth instead.');
+      throw err;
     }
-    const { access_token, user } = data;
-    this._applySession(access_token, user);
   }
 
   private _applySession(token: string, user: any): void {
@@ -234,6 +260,7 @@ class AuthStore {
       email:       user.email ?? '',
       name:        user.name ?? user.email?.split('@')[0] ?? 'User',
       role:        user.role ?? 'data_scientist',
+      avatar_url:  user.avatar_url ?? user.avatarUrl ?? '',
       mfa_enabled: false,
       created_at:  user.created_at ?? new Date().toISOString(),
       is_active:   user.is_active,
@@ -248,6 +275,60 @@ class AuthStore {
       isLoading: false,
     };
     this.notify();
+  }
+
+  // ── Clerk Auth Sync ────────────────────────────────────────
+  // Falls back to a local Clerk-derived session if the backend is unreachable.
+  public async syncClerkUser(clerkToken: string, clerkUser: any): Promise<void> {
+    const email = clerkUser.primaryEmailAddress?.emailAddress || clerkUser.emailAddresses?.[0]?.emailAddress || '';
+    const name = clerkUser.fullName || clerkUser.firstName || email.split('@')[0] || 'Data Scientist';
+    const avatarUrl = clerkUser.imageUrl || '';
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+    try {
+      const resp = await fetch(`${API_BASE}/api/auth/clerk/sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${clerkToken}`,
+        },
+        body: JSON.stringify({
+          id: clerkUser.id,
+          email,
+          name,
+          avatar_url: avatarUrl,
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      const data = await resp.json();
+      if (!resp.ok) {
+        throw new Error(data.detail || 'Clerk user database synchronization failed.');
+      }
+      const { access_token, user } = data;
+      this._applySession(access_token || clerkToken, user);
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      // Backend unreachable — build a local session from Clerk data so the app still works
+      if (err?.name === 'AbortError' || err?.message?.includes('fetch') || err?.message?.includes('network') || err?.message?.includes('Failed')) {
+        console.warn('[AuthStore] Backend unreachable, using Clerk-derived local session.');
+        const fallbackProfile: UserProfile = {
+          id: clerkUser.id || '',
+          email,
+          name,
+          avatar_url: avatarUrl,
+          role: 'data_scientist',
+          mfa_enabled: false,
+          created_at: new Date().toISOString(),
+          is_active: true,
+        };
+        this._applySession(clerkToken, fallbackProfile);
+      } else {
+        throw err;
+      }
+    }
   }
 
   // ── OAuth — redirect to backend OAuth endpoint ─────────────
@@ -365,7 +446,8 @@ export function useAuthStore() {
     signIn:  (email: string, password: string) => authStore.signIn(email, password),
     signInAsDemo: () => authStore.signInAsDemo(),
     signInWithOAuth: (provider: 'google' | 'github') => authStore.signInWithOAuth(provider),
-    signUp:  (email: string, password: string, name: string) => authStore.signUp(email, password, name),
+    syncClerkUser: (clerkToken: string, clerkUser: any) => authStore.syncClerkUser(clerkToken, clerkUser),
+    signUp:  (email: string, password: string, name: string, framework?: string) => authStore.signUp(email, password, name, framework),
     signOut: () => authStore.signOut(),
     // legacy compat
     login:   (user: UserProfile, token: string) => authStore.login(user, token),

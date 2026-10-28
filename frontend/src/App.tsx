@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AppShell } from './components/layout/AppShell';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 
@@ -12,6 +12,7 @@ import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { Login }        from './pages/auth/Login';
 import { Register }     from './pages/auth/Register';
 import { AuthCallback } from './pages/auth/AuthCallback';
+import LandingPage      from './pages/LandingPage';
 
 // Workspace Pages
 import { Dashboard }              from './pages/Dashboard';
@@ -36,13 +37,53 @@ import { ConnectionsManager }     from './pages/connections/ConnectionsManager';
 import { SettingsView }           from './pages/settings/SettingsView';
 import { AdminDashboard }         from './pages/admin/AdminDashboard';
 import { QADashboard }            from './pages/admin/QADashboard';
+import { DocumentationHub }       from './pages/docs/DocumentationHub';
 
 // Legacy compatibility
 const LegacyAnalysis = React.lazy(() => import('@/pages/Analysis'));
 
+import { useUser, useAuth } from '@clerk/clerk-react';
+import { useAuthStore } from './services/authStore';
+
+function ClerkSyncManager() {
+  const { isLoaded, isSignedIn, user } = useUser();
+  const { getToken } = useAuth();
+  const { syncClerkUser, isAuthenticated } = useAuthStore();
+  const syncedUserIdRef = React.useRef<string | null>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  React.useEffect(() => {
+    if (!isLoaded || !isSignedIn || !user) return;
+    if (syncedUserIdRef.current === user.id && isAuthenticated) return;
+
+    let active = true;
+    (async () => {
+      try {
+        const token = (await getToken()) || `clerk_session_${user.id}`;
+        if (active) {
+          await syncClerkUser(token, user);
+          syncedUserIdRef.current = user.id;
+          // Redirect to app after Clerk login if still on an auth page
+          if (location.pathname === '/login' || location.pathname === '/register') {
+            navigate('/projects', { replace: true });
+          }
+        }
+      } catch (err) {
+        console.warn('Clerk background sync warning:', err);
+      }
+    })();
+    return () => { active = false; };
+  }, [isLoaded, isSignedIn, user, getToken, syncClerkUser, isAuthenticated, navigate, location.pathname]);
+
+  return null;
+}
+
 export default function App() {
   return (
-    <React.Suspense fallback={
+    <>
+      <ClerkSyncManager />
+      <React.Suspense fallback={
       <div style={{
         minHeight: '100vh',
         background: 'var(--bg-primary)',
@@ -98,6 +139,14 @@ export default function App() {
           <Route path="/projects/:projectId/runs"                       element={<ProjectSectionWorkspace />} />
           <Route path="/projects/:projectId/settings"                   element={<ProjectSectionWorkspace />} />
           <Route path="/projects/:projectId"                            element={<ProjectSectionWorkspace />} />
+
+          <Route path="/assistant"                                      element={<AIAssistant />} />
+          <Route path="/settings"                                       element={<SettingsView />} />
+          <Route path="/settings/:tab"                                  element={<SettingsView />} />
+
+          {/* Documentation & Interactive Learning Hub */}
+          <Route path="/docs"                                           element={<DocumentationHub />} />
+          <Route path="/learning"                                       element={<DocumentationHub />} />
         </Route>
 
         {/* ─── Protected /app Sub-routes (legacy compat) ─ */}
@@ -121,6 +170,8 @@ export default function App() {
           <Route path="connections"          element={<ConnectionsManager />} />
           <Route path="settings"             element={<SettingsView />} />
           <Route path="settings/:tab"        element={<SettingsView />} />
+          <Route path="docs"                 element={<DocumentationHub />} />
+          <Route path="learning"             element={<DocumentationHub />} />
         </Route>
 
         {/* ─── Protected Admin Center ──────────────────── */}
@@ -137,10 +188,12 @@ export default function App() {
         {/* Legacy Analysis Route */}
         <Route path="/analysis/:sessionId" element={<LegacyAnalysis />} />
 
-        {/* Root Fallbacks */}
-        <Route path="/"  element={<Navigate to="/login" replace />} />
-        <Route path="*"  element={<Navigate to="/login" replace />} />
+        {/* Landing Page & Fallbacks */}
+        <Route path="/"        element={<LandingPage />} />
+        <Route path="/landing" element={<LandingPage />} />
+        <Route path="*"        element={<Navigate to="/" replace />} />
       </Routes>
     </React.Suspense>
+    </>
   );
 }

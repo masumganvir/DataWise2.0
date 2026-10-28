@@ -1,0 +1,40 @@
+graph LR
+    subgraph "1. Raw Dataset"
+        RawData["Raw Uploaded Dataset (CSV/XLSX/JSON)"]
+    end
+
+    subgraph "2. Strict Holdout Isolation"
+        RawData --> Splitter{"Holdout Split (80% Train / 20% Test)"}
+        Splitter --> TrainSet["Training Partition (80%)"]
+        Splitter --> TestSet["Untouched Holdout Test Partition (20%)"]
+    end
+
+    subgraph "3. Train-Only Preprocessing Fitting"
+        TrainSet --> FitPreproc["Fit Preprocessor on Train Only:\n- SimpleImputer / KNNImputer\n- OneHotEncoder / TargetEncoder\n- StandardScaler / RobustScaler\n- PowerTransformer (Yeo-Johnson)"]
+        FitPreproc --> TransformedTrain["Transformed X_train, y_train"]
+    end
+
+    subgraph "4. Cross-Validation & HPO"
+        TransformedTrain --> CV["Stratified K-Fold / TimeSeriesSplit (5 Folds)"]
+        CV --> EstimatorTrain["Candidate Estimators:\n- LightGBM, XGBoost\n- Random Forest, HistGradientBoosting\n- Logistic / Ridge / Lasso\n- PyTorch Tabular MLP"]
+        EstimatorTrain --> ValidationMetrics["CV Validation Scoring (ROC-AUC, PR-AUC, F1, RMSE)"]
+    end
+
+    subgraph "5. Model Selection & Threshold Tuning"
+        ValidationMetrics --> SelectChamp["Select Champion Model"]
+        SelectChamp --> ThresholdOpt["Decision Threshold Optimization (F-Beta / Cost Function)"]
+    end
+
+    subgraph "6. Untouched Test Final Audit"
+        TestSet --> TransformTest["Transform X_test using Fitted Preprocessor"]
+        FitPreproc -.->|Apply Learned Stats| TransformTest
+        TransformTest --> FinalEval["Evaluate Champion on Untouched Test Set"]
+        ThresholdOpt -.->|Optimal Threshold| FinalEval
+        FinalEval --> OverfitAudit["Audit Generalization Gap (|Train - Test| < Tolerance)"]
+    end
+
+    subgraph "7. Serialization & Deployment"
+        OverfitAudit --> CompositePipeline["Assemble Composite Pipeline:\n`Pipeline(steps=[('prep', preprocessor), ('clf', model)])`"]
+        CompositePipeline --> Serialize["Pickle / Joblib Serialization (`model_pipeline.pkl`)"]
+        Serialize --> InferenceServ["Production Inference Endpoint (`/predict`)"]
+    end
